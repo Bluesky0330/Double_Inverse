@@ -1,0 +1,43 @@
+
+[36m============================================================[0m
+[36m   状態確認[0m
+[36m============================================================[0m
+[36m[Remote][0m 実行中のプロセスを検知 (PID: 152818)
+[36m[Remote][0m makeターゲットの存在チェック (SYNC/ATTACH): SSIGA
+
+[36m============================================================[0m
+[36m   ログモニタリング[0m
+[36m============================================================[0m
+  - [1;31m'q' キー[0m : デタッチ
+  - [1;31m'x' キー[0m : Ctrl+C (SIGINT) 相当 — リモート解析を中断
+
+Perf mode: stat
+cd ./src && make -f Make_src
+make[1]: ディレクトリ `/home/oishi/SSIGA_v2_1/src' に入ります
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c main.cpp -o main.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c sub_pre.cpp -o sub_pre.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c sub_solver.cpp -o sub_solver.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c sub_tool.cpp -o sub_tool.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c sub_post.cpp -o sub_post.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c sub_MI3D.cpp -o sub_MI3D.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c sub_search.cpp -o sub_search.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c class.cpp -o class.o
+[1mclass.cpp:334:22: [0m[0;1;35mwarning: [0m[1mtreating Unicode character as whitespace [-Wunicode-whitespace][0m
+  334 |                         overlay[i] = true;　// SS-IGAでは全てオーバーラップする前提[0m
+      | [0;1;32m                                          ^~
+[0m1 warning generated.
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c sub_frac.cpp -o sub_frac.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -fdiagnostics-color=always -flto=auto -flto-jobs=48 -o SSIGA.x main.o sub_pre.o sub_solver.o sub_tool.o sub_post.o sub_MI3D.o sub_search.o class.o sub_frac.o -mkl -qmkl=parallel -Bstatic -lmkl_rt -lpthread -lm -ldl -liomp5 -lhdf5_cpp -lhdf5 -L/usr/lib/x86_64-linux-gnu/hdf5/serial
+Build complete.
+make[1]: ディレクトリ `/home/oishi/SSIGA_v2_1/src' から出ます
+
+[36m============================================================[0m
+[36m   結果回収[0m
+[36m============================================================[0m
+[33m--- Remote -> Local 同期 ---[0m
+[36m[Local][0m  rsync実行中...
+receiving incremental file list
+receiving incremental file list
+receiving incremental file list
+
+[32m===== 全工程完了 =====[0m

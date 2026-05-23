@@ -1,0 +1,330 @@
+﻿Perf mode: stat
+cd ./src && make -f Make_src
+make[1]: ディレクトリ `/home/oishi/SSIGA_v2_0/src' に入ります
+make[1]: `all' に対して行うべき事はありません.
+make[1]: ディレクトリ `/home/oishi/SSIGA_v2_0/src' から出ます
+cd ./analysis && rm -rf output_square_donut
+cd ./analysis && mkdir -p output_square_donut
+cd ./analysis/output_square_donut && mkdir -p bin
+cd ./analysis/material && ./cp.sh ./option_IGA.ini
+Copy destination: ../output_square_donut
+cd ./analysis/output_square_donut && . ../setenv.sh && perf stat -dd numactl --localalloc stdbuf -oL ../../src/SSIGA.x ../input/square_donut/input.txt ./option_IGA.ini | tee log.txt
+
+	Environment variables set by setenv.sh:
+		LD_PRELOAD	= /usr/lib64/libjemalloc.so.1
+		OMP_NUM_THREADS	= 40
+		OMP_PROC_BIND	= close
+		OMP_PLACES	= cores
+		KMP_AFFINITY	= 
+		KMP_BLOCKTIME	= 0
+
+----- SS-IGA Analysis Program -----
+
+1 input files detected.
+
+start Get Option Data
+
+ANALYSIS_MODE: 1
+GEOMETRY_ONLY_OUTPUT: 0
+OUTPUT_GLOBAL_PARAMETERS: 0
+OUTPUT_PARAVIEW: 1
+CALC_ON_GP: 0
+CALC_ON_ELE_VERTEX: 0
+USE_EXTENDED_QUADRATURE: 1
+NUM_GAUSS_POINTS: 4
+NUM_GAUSS_POINTS_EXTENDED: 10
+FRACTURE_MODE: 0
+CALCLATE_DISPLACEMENT: 1
+INTEGRAL_DOMAIN_TYPE: 3
+CRACK_TYPE: 0
+IGA carried out.(No local mesh)
+
+start Get Input Data
+
+
+----- Reading Input File 1 -----
+DIMENSION: 3
+E: 2.010000e+05, nu: 3.000000e-01
+No_Patch: 16
+Total_Patch_to_mesh[0] = 0
+Total_Control_Point: 10800
+Total_Control_Point_to_mesh[0] = 0
+Total_Constraint = 6
+Total_Load = 0
+Total_DistributedForce = 16
+Order[0] = 3
+Order[1] = 3
+Order[2] = 3
+Order[3] = 3
+Order[4] = 3
+Order[5] = 3
+Order[6] = 3
+Order[7] = 3
+Order[8] = 3
+Order[9] = 3
+Order[10] = 3
+Order[11] = 3
+Order[12] = 3
+Order[13] = 3
+Order[14] = 3
+Order[15] = 3
+Order[16] = 3
+Order[17] = 3
+Order[18] = 3
+Order[19] = 3
+Order[20] = 3
+Order[21] = 3
+Order[22] = 3
+Order[23] = 3
+Order[24] = 3
+Order[25] = 3
+Order[26] = 3
+Order[27] = 3
+Order[28] = 3
+Order[29] = 3
+Order[30] = 3
+Order[31] = 3
+Order[32] = 3
+Order[33] = 3
+Order[34] = 3
+Order[35] = 3
+Order[36] = 3
+Order[37] = 3
+Order[38] = 3
+Order[39] = 3
+Order[40] = 3
+Order[41] = 3
+Order[42] = 3
+Order[43] = 3
+Order[44] = 3
+Order[45] = 3
+Order[46] = 3
+Order[47] = 3
+No_knot[0] = 12
+No_knot[1] = 17
+No_knot[2] = 12
+No_knot[3] = 12
+No_knot[4] = 17
+No_knot[5] = 12
+No_knot[6] = 12
+No_knot[7] = 17
+No_knot[8] = 12
+No_knot[9] = 12
+No_knot[10] = 17
+No_knot[11] = 12
+No_knot[12] = 12
+No_knot[13] = 17
+No_knot[14] = 12
+No_knot[15] = 12
+No_knot[16] = 17
+No_knot[17] = 12
+No_knot[18] = 12
+No_knot[19] = 17
+No_knot[20] = 12
+No_knot[21] = 12
+No_knot[22] = 17
+No_knot[23] = 12
+No_knot[24] = 12
+No_knot[25] = 17
+No_knot[26] = 12
+No_knot[27] = 12
+No_knot[28] = 17
+No_knot[29] = 12
+No_knot[30] = 12
+No_knot[31] = 17
+No_knot[32] = 12
+No_knot[33] = 12
+No_knot[34] = 17
+No_knot[35] = 12
+No_knot[36] = 12
+No_knot[37] = 17
+No_knot[38] = 12
+No_knot[39] = 12
+No_knot[40] = 17
+No_knot[41] = 12
+No_knot[42] = 12
+No_knot[43] = 17
+No_knot[44] = 12
+No_knot[45] = 12
+No_knot[46] = 17
+No_knot[47] = 12
+No_Control_point[0] = 8
+No_Control_point[1] = 13
+No_Control_point[2] = 8
+No_Control_point[3] = 8
+No_Control_point[4] = 13
+No_Control_point[5] = 8
+No_Control_point[6] = 8
+No_Control_point[7] = 13
+No_Control_point[8] = 8
+No_Control_point[9] = 8
+No_Control_point[10] = 13
+No_Control_point[11] = 8
+No_Control_point[12] = 8
+No_Control_point[13] = 13
+No_Control_point[14] = 8
+No_Control_point[15] = 8
+No_Control_point[16] = 13
+No_Control_point[17] = 8
+No_Control_point[18] = 8
+No_Control_point[19] = 13
+No_Control_point[20] = 8
+No_Control_point[21] = 8
+No_Control_point[22] = 13
+No_Control_point[23] = 8
+No_Control_point[24] = 8
+No_Control_point[25] = 13
+No_Control_point[26] = 8
+No_Control_point[27] = 8
+No_Control_point[28] = 13
+No_Control_point[29] = 8
+No_Control_point[30] = 8
+No_Control_point[31] = 13
+No_Control_point[32] = 8
+No_Control_point[33] = 8
+No_Control_point[34] = 13
+No_Control_point[35] = 8
+No_Control_point[36] = 8
+No_Control_point[37] = 13
+No_Control_point[38] = 8
+No_Control_point[39] = 8
+No_Control_point[40] = 13
+No_Control_point[41] = 8
+No_Control_point[42] = 8
+No_Control_point[43] = 13
+No_Control_point[44] = 8
+No_Control_point[45] = 8
+No_Control_point[46] = 13
+No_Control_point[47] = 8
+No_Control_point_in_patch[0] = 832	No_Control_point_in_patch[1] = 832	No_Control_point_in_patch[2] = 832	No_Control_point_in_patch[3] = 832	No_Control_point_in_patch[4] = 832	No_Control_point_in_patch[5] = 832	No_Control_point_in_patch[6] = 832	No_Control_point_in_patch[7] = 832	No_Control_point_in_patch[8] = 832	No_Control_point_in_patch[9] = 832	No_Control_point_in_patch[10] = 832	No_Control_point_in_patch[11] = 832	No_Control_point_in_patch[12] = 832	No_Control_point_in_patch[13] = 832	No_Control_point_in_patch[14] = 832	No_Control_point_in_patch[15] = 832	
+Total_Element = 4000
+Total_Element_on_mesh[0] = 4000
+No_Control_point_ON_ELEMENT[0] = 64
+No_Control_point_ON_ELEMENT[1] = 64
+No_Control_point_ON_ELEMENT[2] = 64
+No_Control_point_ON_ELEMENT[3] = 64
+No_Control_point_ON_ELEMENT[4] = 64
+No_Control_point_ON_ELEMENT[5] = 64
+No_Control_point_ON_ELEMENT[6] = 64
+No_Control_point_ON_ELEMENT[7] = 64
+No_Control_point_ON_ELEMENT[8] = 64
+No_Control_point_ON_ELEMENT[9] = 64
+No_Control_point_ON_ELEMENT[10] = 64
+No_Control_point_ON_ELEMENT[11] = 64
+No_Control_point_ON_ELEMENT[12] = 64
+No_Control_point_ON_ELEMENT[13] = 64
+No_Control_point_ON_ELEMENT[14] = 64
+No_Control_point_ON_ELEMENT[15] = 64
+Distibuted load number: 0
+type_load: 2 iPatch: 0 iCoord: 0 jCoord: 1 val_Coord: 0.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 1
+type_load: 2 iPatch: 1 iCoord: 0 jCoord: 1 val_Coord: 0.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 2
+type_load: 2 iPatch: 2 iCoord: 0 jCoord: 1 val_Coord: 0.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 3
+type_load: 2 iPatch: 3 iCoord: 0 jCoord: 1 val_Coord: 0.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 4
+type_load: 2 iPatch: 4 iCoord: 0 jCoord: 1 val_Coord: 0.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 5
+type_load: 2 iPatch: 5 iCoord: 0 jCoord: 1 val_Coord: 0.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 6
+type_load: 2 iPatch: 6 iCoord: 0 jCoord: 1 val_Coord: 0.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 7
+type_load: 2 iPatch: 7 iCoord: 0 jCoord: 1 val_Coord: 0.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 8
+type_load: 2 iPatch: 8 iCoord: 0 jCoord: 1 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 9
+type_load: 2 iPatch: 9 iCoord: 0 jCoord: 1 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 10
+type_load: 2 iPatch: 10 iCoord: 0 jCoord: 1 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 11
+type_load: 2 iPatch: 11 iCoord: 0 jCoord: 1 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 12
+type_load: 2 iPatch: 12 iCoord: 0 jCoord: 1 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 13
+type_load: 2 iPatch: 13 iCoord: 0 jCoord: 1 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 14
+type_load: 2 iPatch: 14 iCoord: 0 jCoord: 1 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 15
+type_load: 2 iPatch: 15 iCoord: 0 jCoord: 1 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+
+start Make INC
+start Preprocessing
+
+K_Whole_Size = 32394
+
+start Make_K_Whole_Ptr_Col
+start Make_connectivity
+start output_for_paraview_timestep
+start Make_F_Vec
+start calc K
+
+	Preprocess time:	3.966[s]
+
+start pardiso
+
+	solver time:	3.813[s]
+
+start postprocess
+
+start output_for_paraview_timestep
+
+	Postprocess time:	0.328[s]
+
+	All analysis time:	8.109[s]
+
+ Performance counter stats for 'numactl --localalloc stdbuf -oL ../../src/SSIGA.x ../input/square_donut/input.txt ./option_IGA.ini':
+
+      81784.501967      task-clock:u (msec)       #    8.079 CPUs utilized          
+                 0      context-switches:u        #    0.000 K/sec                  
+                 0      cpu-migrations:u          #    0.000 K/sec                  
+            33,195      page-faults:u             #    0.406 K/sec                  
+   206,136,706,508      cycles:u                  #    2.520 GHz                      (61.54%)
+   691,281,725,430      instructions:u            #    3.35  insn per cycle           (69.23%)
+   127,009,584,706      branches:u                # 1552.979 M/sec                    (69.24%)
+       415,390,922      branch-misses:u           #    0.33% of all branches          (69.25%)
+   185,753,764,325      L1-dcache-loads:u         # 2271.259 M/sec                    (69.25%)
+     4,917,394,554      L1-dcache-load-misses:u   #    2.65% of all L1-dcache hits    (69.25%)
+        68,614,487      LLC-loads:u               #    0.839 M/sec                    (69.24%)
+        33,877,117      LLC-load-misses:u         #   49.37% of all LL-cache hits     (69.22%)
+   <not supported>      L1-icache-loads:u                                           
+        28,258,763      L1-icache-load-misses:u                                       (69.22%)
+   186,106,329,401      dTLB-loads:u              # 2275.570 M/sec                    (69.21%)
+         5,218,579      dTLB-load-misses:u        #    0.00% of all dTLB cache hits   (61.52%)
+           153,941      iTLB-loads:u              #    0.002 M/sec                    (61.53%)
+         3,019,468      iTLB-load-misses:u        # 1961.44% of all iTLB cache hits   (61.54%)
+
+      10.122638981 seconds time elapsed
+
