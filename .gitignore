@@ -1,0 +1,4 @@
+# 解析のアウトプットファイルや不要なデータを除外
+*.h5
+*.dat
+SSIGA_v2_1/analysis/output_*/
