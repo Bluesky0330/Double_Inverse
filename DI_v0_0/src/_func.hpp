@@ -1,6 +1,3 @@
-#ifndef _FUNC
-#define _FUNC
-
 #include <vector>
 #include <string>
 #include "_class.hpp"
@@ -16,6 +13,7 @@ void Global_var(const int num, information *info);
 // Get input file data
 void Get_Input_1(int tm, const char *filename, information *info);
 void Get_Input_2(int tm, const char *filename, information *info);
+void Get_Input_3(const char *filename, information *info);
 void Make_INC(information *info);
 void Make_INC_for_local_geometric(information *info);
 void setDistLoad(int current_mesh, int patch, int coord, double target_knot, double *range, int type_load, double *dist_load_coeff, information *info);
@@ -163,5 +161,7 @@ double Make_a_q(int ele, double *para, double *a_inv_T, information *info, int c
 double Make_a_q_for_SSIGA(int ele, double *para, double *a_inv_T, information *info, int crack_dir, double delta, bool coef_flag);
 void Make_a(int ele, double *para, double *a, information *info);
 void Make_a_tilde_prime(int ele, double *para, double *a, information *info, int crack_dir, double delta);
-
-#endif
+// Inverse mapping
+void First_inverse_mapping(information *info);
+void Second_inverse_mapping(information *info);
+void Output_new_input_file(information *info);

@@ -399,21 +399,12 @@ void Allocation(const int num, information *info)
 	else if(num == 10)
 	{
 		// memory allocation
-		info->delta_F = (double *)calloc(K_Whole_Size, sizeof(double));
-		info->F = (double *)calloc(K_Whole_Size, sizeof(double));
-		info->residual_vec = (double *)calloc(K_Whole_Size, sizeof(double));
-		info->internal_force = (double *)malloc(sizeof(double) * K_Whole_Size);
-		info->external_force = (double *)malloc(sizeof(double) * K_Whole_Size);
-		info->previous_external_force = (double *)calloc(K_Whole_Size, sizeof(double));
-		info->rhs_vec_initial = (double *)calloc(sizeof(double) * K_Whole_Size, sizeof(double));
-		info->forced_disp_T = (double *)calloc(K_Whole_Size, sizeof(double));
-		info->disp_increment = (double *)calloc(info->Total_Control_Point_to_mesh[Total_mesh] * info->DIMENSION, sizeof(double));
-		info->disp_overlay = (double *)calloc(info->Total_Control_Point_to_mesh[Total_mesh] * info->DIMENSION, sizeof(double));
-		info->disp_overlay_increment = (double *)calloc(info->Total_Control_Point_to_mesh[Total_mesh] * info->DIMENSION, sizeof(double));
-		info->disp = (double *)calloc(info->Total_Control_Point_to_mesh[Total_mesh] * info->DIMENSION, sizeof(double));
-		info->disp_previous = (double *)calloc(info->Total_Control_Point_to_mesh[Total_mesh] * info->DIMENSION, sizeof(double));
-				
-		if (info->delta_F == NULL || info->F == NULL || info->residual_vec == NULL || info->internal_force == NULL || info->external_force == NULL || info->rhs_vec_initial == NULL || info->previous_external_force == NULL || info->forced_disp_T == NULL || info->disp_increment == NULL || info->disp_overlay == NULL || info->disp_overlay_increment == NULL || info->disp == NULL || info->disp_previous == NULL)
+		int Element_vertex = info->Total_Element_on_mesh[Total_mesh] - info->Total_Element_on_mesh[Total_mesh - 1];
+		Element_vertex *= pow_int(2, info->DIMENSION);
+		info->Target_Physical_Coord = (double *)malloc(sizeof(double) * Element_vertex * info->DIMENSION); // Target_Physical_Coord[Element_vertex][info->DIMENSION]
+		info->Target_Para_Coord = (double *)malloc(sizeof(double) * Element_vertex * info->DIMENSION); // Target_Para_Coord[Element_vertex][info->DIMENSION]
+		info->New_Node_Coordinate = (double *)malloc(sizeof(double) * (info->Geo_Total_Control_Point_on_mesh * (info->DIMENSION + 1)));
+		if (info->Target_Physical_Coord == NULL || info->Target_Para_Coord == NULL || info->New_Node_Coordinate == NULL)
 		{
 			printf("Cannot allocate memory\n");
 			exit(1);
@@ -1278,6 +1269,53 @@ void Get_Input_2(int tm, const char *filename, information *info)
 	}
 	fclose(fp);
 }
+
+
+void Get_Input_3(const char *filename, information *info)
+{
+	// 入力ファイルから情報を読み取る関数
+	char s[256];
+	int temp_i, temp_i2;
+	double temp_d, temp_d2, temp_d3;
+	
+	int i,j,k;
+
+	// ローカルIGA解析モデルの要素数の取得
+	int local_ele_num = info->Total_Element_on_mesh[Total_mesh] - info->Total_Element_on_mesh[Total_mesh - 1];
+	
+	// 要素頂点の数
+	int num_vertex;
+	if (info->DIMENSION == 2)
+	{
+		num_vertex = 4; // 2Dの場合、要素は4つの頂点を持つ
+	}
+	else if (info->DIMENSION == 3)
+	{
+		num_vertex = 8; // 3Dの場合、要素は8つの頂点を持つ
+	}
+
+	FILE *fp = fopen(filename, "r");
+	if (fp == NULL)
+	{
+		printf("Error: Could not open file %s\n", filename);
+		exit(1);
+	}
+
+	// 一行目スキップ
+	fgets(s, 256, fp);
+
+	// 要素番号, 頂点番号, ξ, η, ζの順に入力ファイルに書いてあるINPUT
+	for (i = 0; i < local_ele_num; i++)
+		for (j = 0; j < num_vertex; j++)
+		{
+			fscanf(fp, "%d %d %lf %lf %lf", &temp_i, &temp_i2, &temp_d, &temp_d2, &temp_d3);
+			info->Target_physical_coordinate[(i * num_vertex + j) * info->DIMENSION + 0] = temp_d;
+			info->Target_physical_coordinate[(i * num_vertex + j) * info->DIMENSION + 1] = temp_d2;
+			info->Target_physical_coordinate[(i * num_vertex + j) * info->DIMENSION + 2] = temp_d3;
+		}
+	fclose(fp);
+}
+	
 
 // INC 等の作成
 void Make_INC(information *info)
@@ -2384,900 +2422,6 @@ void setDistLoad(int current_mesh, int patch, int coord_i, int coord_j, double t
 	// exit(0);
 }
 
-
-// 無限版円孔の境界条件設定 !!type_load = 2 にすること!! !!二次元しか使えません!!
-void setDistLoad_infinite_plate_with_hole(int mesh_n, int iPatch, int iCoord, double val_Coord, double *Range_Coord, int type_load, double *Coeff_Dist_Load, information *info)
-{
-    int iii, jjj;
-    int jCoord = 0;
-    int iPos[2] = {-10000, -10000}, jPos[2] = {-10000, -10000};
-    int No_Element_For_Dist_Load;
-    int iX, iY;
-    int ic, ig;
-    double val_jCoord_Local = 0.0;
-
-    static int *No_Element_for_Integration = (int *)malloc(sizeof(int) * info->Total_Knot_to_mesh[Total_mesh]);
-    static int *iControlpoint = (int *)malloc(sizeof(int) * MAX_NO_CP_ON_ELEMENT);
-
-	double w_load[4 * 4] = {0.0};
-	double Gxi_load[4 * 4 * MAX_DIMENSION] = {0.0};
-	double w_1D_load[4] = {0.0};
-	double Gxi_1D_load[4] = {0.0};
-
-	Gauss_point(info, 4, w_load, Gxi_load, w_1D_load, Gxi_1D_load);
-	int GP_1D_load = 4;
-
-	// ガウス点の物理座標を取得(デバッグ用)
-	bool debug_flag = false;
-
-    // ハードコーディングにより、厳密解の応力テンソルを与える
-	# if 0 // 円形のグローバル
-	double exact_stress[20][3] = {{0.0}}; // [5要素×4積分点][σxx, σyy, τxy]
-	// double exact_stress[40][3] = {{0.0}}; // [10要素×4積分点][σxx, σyy, τxy]
-	// double exact_stress[120][3] = {{0.0}}; // [30要素×4積分点][σrr, σθθ, τrθ]
-	#endif
-	# if 1 // 矩形のグローバル
-	double exact_stress[32][3] = {{0.0}}; // [8要素×4積分点][σxx, σyy, τxy]
-	#endif
-
-	if (type_load == 0 || type_load == 1)
-	{
-		printf("Error, incorrect input data at distributed load.\nChange the type of the distributed load.\n");
-		exit(1);
-	}
-	else if(type_load == 2)
-	{
-		// 円形のグローバル
-		// global = 5x5, gauss point = 4x4
-		#if 0
-		exact_stress[0][0] = 0.0166093448 ;
-		exact_stress[1][0] = 0.0157548537 ;
-		exact_stress[2][0] = 0.0129671202 ;
-		exact_stress[3][0] = 0.0096950191 ;
-		exact_stress[4][0] = 0.0076394868 ;
-		exact_stress[5][0] = 0.0034186277 ;
-		exact_stress[6][0] = -0.0022096693 ;
-		exact_stress[7][0] = -0.0060556346 ;
-		exact_stress[8][0] = -0.0077790783 ;
-		exact_stress[9][0] = -0.0101879496 ;
-		exact_stress[10][0] = -0.0114367502 ;
-		exact_stress[11][0] = -0.0109016943 ;
-		exact_stress[12][0] = -0.0057062226 ;
-		exact_stress[13][0] = -0.0028767654 ;
-		exact_stress[14][0] = -0.0010709992 ;
-		exact_stress[15][0] = -0.0002331103 ;
-		exact_stress[16][0] = 0.0000349186 ;
-		exact_stress[17][0] = 0.0003017349 ;
-		exact_stress[18][0] = 0.0004373820 ;
-		exact_stress[19][0] = 0.0004108731 ;
-
-		exact_stress[0][1] = 10.0055955999 ;
-		exact_stress[1][1] = 10.0060665472 ;
-		exact_stress[2][1] = 10.0075591477 ;
-		exact_stress[3][1] = 10.0092126547 ;
-		exact_stress[4][1] = 10.0101864751 ;
-		exact_stress[5][1] = 10.0119855386 ;
-		exact_stress[6][1] = 10.0137614676 ;
-		exact_stress[7][1] = 10.0142213289 ;
-		exact_stress[8][1] = 10.0140243103 ;
-		exact_stress[9][1] = 10.0126855508 ;
-		exact_stress[10][1] = 10.0089391490 ;
-		exact_stress[11][1] = 10.0046564622 ;
-		exact_stress[12][1] = 10.0011130196 ;
-		exact_stress[13][1] = 9.9987181180 ;
-		exact_stress[14][1] = 9.9972199576 ;
-		exact_stress[15][1] = 9.9969589541 ;
-		exact_stress[16][1] = 9.9973061898 ;
-		exact_stress[17][1] = 9.9974175687 ;
-		exact_stress[18][1] = 9.9975986919 ;
-		exact_stress[19][1] = 9.9979375195 ;
-
-		exact_stress[0][2] = 0.0006549511 ;
-		exact_stress[1][2] = 0.0030685554 ;
-		exact_stress[2][2] = 0.0057230676 ;
-		exact_stress[3][2] = 0.0069988626 ;
-		exact_stress[4][2] = 0.0073088956 ;
-		exact_stress[5][2] = 0.0070799538 ;
-		exact_stress[6][2] = 0.0051059581 ;
-		exact_stress[7][2] = 0.0024148781 ;
-		exact_stress[8][2] = 0.0006518915 ;
-		exact_stress[9][2] = -0.0030427153 ;
-		exact_stress[10][2] = -0.0079979952 ;
-		exact_stress[11][2] = -0.0113151958 ;
-		exact_stress[12][2] = -0.0071742389 ;
-		exact_stress[13][2] = -0.0052590110 ;
-		exact_stress[14][2] = -0.0037755617 ;
-		exact_stress[15][2] = -0.0025636774 ;
-		exact_stress[16][2] = -0.0018071789 ;
-		exact_stress[17][2] = -0.0011102279 ;
-		exact_stress[18][2] = -0.0004658061 ;
-		exact_stress[19][2] = -0.0000813989 ;
-		#endif
-
-		// global = 10x10, gauss point = 4x4
-		#if 0
-		exact_stress[0][0] = 0.0166384829 ;
-		exact_stress[1][0] = 0.0164270749 ;
-		exact_stress[2][0] = 0.0157274688 ;
-		exact_stress[3][0] = 0.0148663341 ;
-		exact_stress[4][0] = 0.0142949363 ;
-		exact_stress[5][0] = 0.0130209021 ;
-		exact_stress[6][0] = 0.0109939957 ;
-		exact_stress[7][0] = 0.0091983715 ;
-		exact_stress[8][0] = 0.0081697897 ;
-		exact_stress[9][0] = 0.0061330030 ;
-		exact_stress[10][0] = 0.0033352552 ;
-		exact_stress[11][0] = 0.0011501126 ;
-		exact_stress[12][0] = -0.0000074703 ;
-		exact_stress[13][0] = -0.0021302972 ;
-		exact_stress[14][0] = -0.0047244173 ;
-		exact_stress[15][0] = -0.0065114804 ;
-		exact_stress[16][0] = -0.0073739914 ;
-		exact_stress[17][0] = -0.0087970064 ;
-		exact_stress[18][0] = -0.0102223050 ;
-		exact_stress[19][0] = -0.0109530433 ;
-		exact_stress[20][0] = -0.0112086589 ;
-		exact_stress[21][0] = -0.0114346453 ;
-		exact_stress[22][0] = -0.0112411614 ;
-		exact_stress[23][0] = -0.0107397622 ;
-		exact_stress[24][0] = -0.0103575021 ;
-		exact_stress[25][0] = -0.0094465781 ;
-		exact_stress[26][0] = -0.0079369442 ;
-		exact_stress[27][0] = -0.0065926205 ;
-		exact_stress[28][0] = -0.0058291060 ;
-		exact_stress[29][0] = -0.0043412813 ;
-		exact_stress[30][0] = -0.0023648225 ;
-		exact_stress[31][0] = -0.0008854063 ;
-		exact_stress[32][0] = -0.0001272875 ;
-		exact_stress[33][0] = 0.0012118611 ;
-		exact_stress[34][0] = 0.0027449351 ;
-		exact_stress[35][0] = 0.0037189910 ;
-		exact_stress[36][0] = 0.0041582657 ;
-		exact_stress[37][0] = 0.0048229638 ;
-		exact_stress[38][0] = 0.0053652613 ;
-		exact_stress[39][0] = 0.0055295230 ;
-
-		exact_stress[0][1] = 10.0055794369 ;
-		exact_stress[1][1] = 10.0056965524 ;
-		exact_stress[2][1] = 10.0060815412 ;
-		exact_stress[3][1] = 10.0065498027 ;
-		exact_stress[4][1] = 10.0068569543 ;
-		exact_stress[5][1] = 10.0075310320 ;
-		exact_stress[6][1] = 10.0085702734 ;
-		exact_stress[7][1] = 10.0094529466 ;
-		exact_stress[8][1] = 10.0099406022 ;
-		exact_stress[9][1] = 10.0108626479 ;
-		exact_stress[10][1] = 10.0120178178 ;
-		exact_stress[11][1] = 10.0128083247 ;
-		exact_stress[12][1] = 10.0131777706 ;
-		exact_stress[13][1] = 10.0137435913 ;
-		exact_stress[14][1] = 10.0141687390 ;
-		exact_stress[15][1] = 10.0142035238 ;
-		exact_stress[16][1] = 10.0141055330 ;
-		exact_stress[17][1] = 10.0136853164 ;
-		exact_stress[18][1] = 10.0126469855 ;
-		exact_stress[19][1] = 10.0114642745 ;
-		exact_stress[20][1] = 10.0106974277 ;
-		exact_stress[21][1] = 10.0090099647 ;
-		exact_stress[22][1] = 10.0063528515 ;
-		exact_stress[23][1] = 10.0040082206 ;
-		exact_stress[24][1] = 10.0026654587 ;
-		exact_stress[25][1] = 10.0000022565 ;
-		exact_stress[26][1] = 9.9963236501 ;
-		exact_stress[27][1] = 9.9934223202 ;
-		exact_stress[28][1] = 9.9918706687 ;
-		exact_stress[29][1] = 9.9889882083 ;
-		exact_stress[30][1] = 9.9853691716 ;
-		exact_stress[31][1] = 9.9827750144 ;
-		exact_stress[32][1] = 9.9814759695 ;
-		exact_stress[33][1] = 9.9792238698 ;
-		exact_stress[34][1] = 9.9767031308 ;
-		exact_stress[35][1] = 9.9751291184 ;
-		exact_stress[36][1] = 9.9744255974 ;
-		exact_stress[37][1] = 9.9733680262 ;
-		exact_stress[38][1] = 9.9725111114 ;
-		exact_stress[39][1] = 9.9722525572 ;
-
-		exact_stress[0][2] = 0.0003271347 ;
-		exact_stress[1][2] = 0.0015555023 ;
-		exact_stress[2][2] = 0.0031128117 ;
-		exact_stress[3][2] = 0.0042235523 ;
-		exact_stress[4][2] = 0.0047711908 ;
-		exact_stress[5][2] = 0.0056910476 ;
-		exact_stress[6][2] = 0.0066281195 ;
-		exact_stress[7][2] = 0.0071026664 ;
-		exact_stress[8][2] = 0.0072581171 ;
-		exact_stress[9][2] = 0.0073521770 ;
-		exact_stress[10][2] = 0.0070647288 ;
-		exact_stress[11][2] = 0.0065202532 ;
-		exact_stress[12][2] = 0.0061156173 ;
-		exact_stress[13][2] = 0.0051481991 ;
-		exact_stress[14][2] = 0.0035058470 ;
-		exact_stress[15][2] = 0.0019923872 ;
-		exact_stress[16][2] = 0.0011100416 ;
-		exact_stress[17][2] = -0.0006588496 ;
-		exact_stress[18][2] = -0.0031161995 ;
-		exact_stress[19][2] = -0.0050438411 ;
-		exact_stress[20][2] = -0.0060643293 ;
-		exact_stress[21][2] = -0.0079285740 ;
-		exact_stress[22][2] = -0.0101801032 ;
-		exact_stress[23][2] = -0.0116991103 ;
-		exact_stress[24][2] = -0.0124166333 ;
-		exact_stress[25][2] = -0.0135635797 ;
-		exact_stress[26][2] = -0.0146212999 ;
-		exact_stress[27][2] = -0.0150650636 ;
-		exact_stress[28][2] = -0.0151659051 ;
-		exact_stress[29][2] = -0.0150976347 ;
-		exact_stress[30][2] = -0.0145106512 ;
-		exact_stress[31][2] = -0.0136970779 ;
-		exact_stress[32][2] = -0.0131432685 ;
-		exact_stress[33][2] = -0.0118975250 ;
-		exact_stress[34][2] = -0.0099173097 ;
-		exact_stress[35][2] = -0.0081779739 ;
-		exact_stress[36][2] = -0.0071890304 ;
-		exact_stress[37][2] = -0.0052455471 ;
-		exact_stress[38][2] = -0.0026010017 ;
-		exact_stress[39][2] = -0.0005457667 ;
-		#endif
-
-		// global = 30x30, gauss point = 4x4
-		#if 0
-		exact_stress[0][0] = 0.0166470770 ;
-		exact_stress[1][0] = 0.0166238344 ;
-		exact_stress[2][0] = 0.0165473688 ;
-		exact_stress[3][0] = 0.0164529905 ;
-		exact_stress[4][0] = 0.0163899213 ;
-		exact_stress[5][0] = 0.0162474911 ;
-		exact_stress[6][0] = 0.0160142940 ;
-		exact_stress[7][0] = 0.0157992489 ;
-		exact_stress[8][0] = 0.0156718094 ;
-		exact_stress[9][0] = 0.0154086815 ;
-		exact_stress[10][0] = 0.0150186796 ;
-		exact_stress[11][0] = 0.0146844141 ;
-		exact_stress[12][0] = 0.0144939214 ;
-		exact_stress[13][0] = 0.0141136114 ;
-		exact_stress[14][0] = 0.0135734774 ;
-		exact_stress[15][0] = 0.0131267318 ;
-		exact_stress[16][0] = 0.0128773602 ;
-		exact_stress[17][0] = 0.0123888016 ;
-		exact_stress[18][0] = 0.0117123572 ;
-		exact_stress[19][0] = 0.0111653846 ;
-		exact_stress[20][0] = 0.0108642496 ;
-		exact_stress[21][0] = 0.0102818860 ;
-		exact_stress[22][0] = 0.0094900898 ;
-		exact_stress[23][0] = 0.0088605417 ;
-		exact_stress[24][0] = 0.0085176005 ;
-		exact_stress[25][0] = 0.0078611243 ;
-		exact_stress[26][0] = 0.0069815823 ;
-		exact_stress[27][0] = 0.0062920176 ;
-		exact_stress[28][0] = 0.0059197657 ;
-		exact_stress[29][0] = 0.0052134718 ;
-		exact_stress[30][0] = 0.0042794418 ;
-		exact_stress[31][0] = 0.0035564480 ;
-		exact_stress[32][0] = 0.0031694107 ;
-		exact_stress[33][0] = 0.0024411667 ;
-		exact_stress[34][0] = 0.0014900726 ;
-		exact_stress[35][0] = 0.0007630219 ;
-		exact_stress[36][0] = 0.0003770554 ;
-		exact_stress[37][0] = -0.0003430725 ;
-		exact_stress[38][0] = -0.0012715522 ;
-		exact_stress[39][0] = -0.0019720504 ;
-		exact_stress[40][0] = -0.0023406099 ;
-		exact_stress[41][0] = -0.0030220003 ;
-		exact_stress[42][0] = -0.0038881536 ;
-		exact_stress[43][0] = -0.0045320044 ;
-		exact_stress[44][0] = -0.0048672887 ;
-		exact_stress[45][0] = -0.0054805637 ;
-		exact_stress[46][0] = -0.0062470196 ;
-		exact_stress[47][0] = -0.0068064704 ;
-		exact_stress[48][0] = -0.0070940520 ;
-		exact_stress[49][0] = -0.0076128946 ;
-		exact_stress[50][0] = -0.0082469621 ;
-		exact_stress[51][0] = -0.0086983584 ;
-		exact_stress[52][0] = -0.0089261693 ;
-		exact_stress[53][0] = -0.0093290072 ;
-		exact_stress[54][0] = -0.0098047816 ;
-		exact_stress[55][0] = -0.0101300984 ;
-		exact_stress[56][0] = -0.0102892129 ;
-		exact_stress[57][0] = -0.0105606215 ;
-		exact_stress[58][0] = -0.0108606692 ;
-		exact_stress[59][0] = -0.0110486814 ;
-		exact_stress[60][0] = -0.0111338941 ;
-		exact_stress[61][0] = -0.0112655888 ;
-		exact_stress[62][0] = -0.0113820566 ;
-		exact_stress[63][0] = -0.0114290387 ;
-		exact_stress[64][0] = -0.0114391825 ;
-		exact_stress[65][0] = -0.0114305109 ;
-		exact_stress[66][0] = -0.0113655557 ;
-		exact_stress[67][0] = -0.0112754478 ;
-		exact_stress[68][0] = -0.0112134234 ;
-		exact_stress[69][0] = -0.0110713102 ;
-		exact_stress[70][0] = -0.0108368130 ;
-		exact_stress[71][0] = -0.0106208378 ;
-		exact_stress[72][0] = -0.0104933531 ;
-		exact_stress[73][0] = -0.0102317073 ;
-		exact_stress[74][0] = -0.0098483011 ;
-		exact_stress[75][0] = -0.0095240740 ;
-		exact_stress[76][0] = -0.0093411209 ;
-		exact_stress[77][0] = -0.0089797648 ;
-		exact_stress[78][0] = -0.0084752748 ;
-		exact_stress[79][0] = -0.0080654937 ;
-		exact_stress[80][0] = -0.0078396119 ;
-		exact_stress[81][0] = -0.0074028363 ;
-		exact_stress[82][0] = -0.0068102817 ;
-		exact_stress[83][0] = -0.0063411207 ;
-		exact_stress[84][0] = -0.0060865194 ;
-		exact_stress[85][0] = -0.0056013995 ;
-		exact_stress[86][0] = -0.0049567401 ;
-		exact_stress[87][0] = -0.0044560932 ;
-		exact_stress[88][0] = -0.0041877088 ;
-		exact_stress[89][0] = -0.0036823299 ;
-		exact_stress[90][0] = -0.0030221550 ;
-		exact_stress[91][0] = -0.0025178794 ;
-		exact_stress[92][0] = -0.0022504480 ;
-		exact_stress[93][0] = -0.0017521879 ;
-		exact_stress[94][0] = -0.0011115321 ;
-		exact_stress[95][0] = -0.0006298282 ;
-		exact_stress[96][0] = -0.0003770448 ;
-		exact_stress[97][0] = 0.0000889579 ;
-		exact_stress[98][0] = 0.0006785129 ;
-		exact_stress[99][0] = 0.0011144717 ;
-		exact_stress[100][0] = 0.0013406515 ;
-		exact_stress[101][0] = 0.0017527439 ;
-		exact_stress[102][0] = 0.0022645659 ;
-		exact_stress[103][0] = 0.0026356757 ;
-		exact_stress[104][0] = 0.0028255535 ;
-		exact_stress[105][0] = 0.0031664669 ;
-		exact_stress[106][0] = 0.0035798995 ;
-		exact_stress[107][0] = 0.0038718003 ;
-		exact_stress[108][0] = 0.0040182536 ;
-		exact_stress[109][0] = 0.0042756275 ;
-		exact_stress[110][0] = 0.0045765282 ;
-		exact_stress[111][0] = 0.0047799061 ;
-		exact_stress[112][0] = 0.0048785113 ;
-		exact_stress[113][0] = 0.0050450533 ;
-		exact_stress[114][0] = 0.0052258672 ;
-		exact_stress[115][0] = 0.0053364118 ;
-		exact_stress[116][0] = 0.0053853878 ;
-		exact_stress[117][0] = 0.0054587065 ;
-		exact_stress[118][0] = 0.0055181355 ;
-		exact_stress[119][0] = 0.0055362043 ;
-
-		exact_stress[0][1] = 10.0055746684 ;
-		exact_stress[1][1] = 10.0055875634 ;
-		exact_stress[2][1] = 10.0056299559 ;
-		exact_stress[3][1] = 10.0056822149 ;
-		exact_stress[4][1] = 10.0057170978 ;
-		exact_stress[5][1] = 10.0057957566 ;
-		exact_stress[6][1] = 10.0059241874 ;
-		exact_stress[7][1] = 10.0060422262 ;
-		exact_stress[8][1] = 10.0061119972 ;
-		exact_stress[9][1] = 10.0062556251 ;
-		exact_stress[10][1] = 10.0064674245 ;
-		exact_stress[11][1] = 10.0066479070 ;
-		exact_stress[12][1] = 10.0067503208 ;
-		exact_stress[13][1] = 10.0069538125 ;
-		exact_stress[14][1] = 10.0072405437 ;
-		exact_stress[15][1] = 10.0074756248 ;
-		exact_stress[16][1] = 10.0076060088 ;
-		exact_stress[17][1] = 10.0078596697 ;
-		exact_stress[18][1] = 10.0082068693 ;
-		exact_stress[19][1] = 10.0084840815 ;
-		exact_stress[20][1] = 10.0086353063 ;
-		exact_stress[21][1] = 10.0089248602 ;
-		exact_stress[22][1] = 10.0093121741 ;
-		exact_stress[23][1] = 10.0096146314 ;
-		exact_stress[24][1] = 10.0097772569 ;
-		exact_stress[25][1] = 10.0100841885 ;
-		exact_stress[26][1] = 10.0104859580 ;
-		exact_stress[27][1] = 10.0107929137 ;
-		exact_stress[28][1] = 10.0109555245 ;
-		exact_stress[29][1] = 10.0112577817 ;
-		exact_stress[30][1] = 10.0116441016 ;
-		exact_stress[31][1] = 10.0119318657 ;
-		exact_stress[32][1] = 10.0120815972 ;
-		exact_stress[33][1] = 10.0123546469 ;
-		exact_stress[34][1] = 10.0126928716 ;
-		exact_stress[35][1] = 10.0129360606 ;
-		exact_stress[36][1] = 10.0130592967 ;
-		exact_stress[37][1] = 10.0132774908 ;
-		exact_stress[38][1] = 10.0135341205 ;
-		exact_stress[39][1] = 10.0137071733 ;
-		exact_stress[40][1] = 10.0137903776 ;
-		exact_stress[41][1] = 10.0139285493 ;
-		exact_stress[42][1] = 10.0140713759 ;
-		exact_stress[43][1] = 10.0141502374 ;
-		exact_stress[44][1] = 10.0141808594 ;
-		exact_stress[45][1] = 10.0142160384 ;
-		exact_stress[46][1] = 10.0142163950 ;
-		exact_stress[47][1] = 10.0141802359 ;
-		exact_stress[48][1] = 10.0141476235 ;
-		exact_stress[49][1] = 10.0140607313 ;
-		exact_stress[50][1] = 10.0138956582 ;
-		exact_stress[51][1] = 10.0137284884 ;
-		exact_stress[52][1] = 10.0136247264 ;
-		exact_stress[53][1] = 10.0134021042 ;
-		exact_stress[54][1] = 10.0130562402 ;
-		exact_stress[55][1] = 10.0127482667 ;
-		exact_stress[56][1] = 10.0125688645 ;
-		exact_stress[57][1] = 10.0122034916 ;
-		exact_stress[58][1] = 10.0116705083 ;
-		exact_stress[59][1] = 10.0112191068 ;
-		exact_stress[60][1] = 10.0109634687 ;
-		exact_stress[61][1] = 10.0104557497 ;
-		exact_stress[62][1] = 10.0097391864 ;
-		exact_stress[63][1] = 10.0091493871 ;
-		exact_stress[64][1] = 10.0088210143 ;
-		exact_stress[65][1] = 10.0081790524 ;
-		exact_stress[66][1] = 10.0072924587 ;
-		exact_stress[67][1] = 10.0065768907 ;
-		exact_stress[68][1] = 10.0061832934 ;
-		exact_stress[69][1] = 10.0054226141 ;
-		exact_stress[70][1] = 10.0043889763 ;
-		exact_stress[71][1] = 10.0035672663 ;
-		exact_stress[72][1] = 10.0031195877 ;
-		exact_stress[73][1] = 10.0022623319 ;
-		exact_stress[74][1] = 10.0011128263 ;
-		exact_stress[75][1] = 10.0002105033 ;
-		exact_stress[76][1] = 9.9997228880 ;
-		exact_stress[77][1] = 9.9987965425 ;
-		exact_stress[78][1] = 9.9975687258 ;
-		exact_stress[79][1] = 9.9966157261 ;
-		exact_stress[80][1] = 9.9961044890 ;
-		exact_stress[81][1] = 9.9951402681 ;
-		exact_stress[82][1] = 9.9938758634 ;
-		exact_stress[83][1] = 9.9929047686 ;
-		exact_stress[84][1] = 9.9923874369 ;
-		exact_stress[85][1] = 9.9914184552 ;
-		exact_stress[86][1] = 9.9901609264 ;
-		exact_stress[87][1] = 9.9892050854 ;
-		exact_stress[88][1] = 9.9886993951 ;
-		exact_stress[89][1] = 9.9877587865 ;
-		exact_stress[90][1] = 9.9865509014 ;
-		exact_stress[91][1] = 9.9856425891 ;
-		exact_stress[92][1] = 9.9851655167 ;
-		exact_stress[93][1] = 9.9842846475 ;
-		exact_stress[94][1] = 9.9831662193 ;
-		exact_stress[95][1] = 9.9823349707 ;
-		exact_stress[96][1] = 9.9819018717 ;
-		exact_stress[97][1] = 9.9811087782 ;
-		exact_stress[98][1] = 9.9801147408 ;
-		exact_stress[99][1] = 9.9793859724 ;
-		exact_stress[100][1] = 9.9790098824 ;
-		exact_stress[101][1] = 9.9783280296 ;
-		exact_stress[102][1] = 9.9774869628 ;
-		exact_stress[103][1] = 9.9768809554 ;
-		exact_stress[104][1] = 9.9765720898 ;
-		exact_stress[105][1] = 9.9760195120 ;
-		exact_stress[106][1] = 9.9753526766 ;
-		exact_stress[107][1] = 9.9748839575 ;
-		exact_stress[108][1] = 9.9746494253 ;
-		exact_stress[109][1] = 9.9742382684 ;
-		exact_stress[110][1] = 9.9737591652 ;
-		exact_stress[111][1] = 9.9734362873 ;
-		exact_stress[112][1] = 9.9732800136 ;
-		exact_stress[113][1] = 9.9730164653 ;
-		exact_stress[114][1] = 9.9727308850 ;
-		exact_stress[115][1] = 9.9725565692 ;
-		exact_stress[116][1] = 9.9724794068 ;
-		exact_stress[117][1] = 9.9723639689 ;
-		exact_stress[118][1] = 9.9722704668 ;
-		exact_stress[119][1] = 9.9722420503 ;
-
-		exact_stress[0][2] = 0.0001089290 ;
-		exact_stress[1][2] = 0.0005186479 ;
-		exact_stress[2][2] = 0.0010537164 ;
-		exact_stress[3][2] = 0.0014625316 ;
-		exact_stress[4][2] = 0.0016794164 ;
-		exact_stress[5][2] = 0.0020836834 ;
-		exact_stress[6][2] = 0.0026038293 ;
-		exact_stress[7][2] = 0.0029951032 ;
-		exact_stress[8][2] = 0.0032004468 ;
-		exact_stress[9][2] = 0.0035789013 ;
-		exact_stress[10][2] = 0.0040571564 ;
-		exact_stress[11][2] = 0.0044099969 ;
-		exact_stress[12][2] = 0.0045926146 ;
-		exact_stress[13][2] = 0.0049242210 ;
-		exact_stress[14][2] = 0.0053331573 ;
-		exact_stress[15][2] = 0.0056266581 ;
-		exact_stress[16][2] = 0.0057754816 ;
-		exact_stress[17][2] = 0.0060396629 ;
-		exact_stress[18][2] = 0.0063529335 ;
-		exact_stress[19][2] = 0.0065673968 ;
-		exact_stress[20][2] = 0.0066721395 ;
-		exact_stress[21][2] = 0.0068500455 ;
-		exact_stress[22][2] = 0.0070440732 ;
-		exact_stress[23][2] = 0.0071623223 ;
-		exact_stress[24][2] = 0.0072141822 ;
-		exact_stress[25][2] = 0.0072900125 ;
-		exact_stress[26][2] = 0.0073457125 ;
-		exact_stress[27][2] = 0.0073544001 ;
-		exact_stress[28][2] = 0.0073467497 ;
-		exact_stress[29][2] = 0.0073090310 ;
-		exact_stress[30][2] = 0.0072134295 ;
-		exact_stress[31][2] = 0.0071042329 ;
-		exact_stress[32][2] = 0.0070332377 ;
-		exact_stress[33][2] = 0.0068759413 ;
-		exact_stress[34][2] = 0.0066235429 ;
-		exact_stress[35][2] = 0.0063941317 ;
-		exact_stress[36][2] = 0.0062592337 ;
-		exact_stress[37][2] = 0.0059826211 ;
-		exact_stress[38][2] = 0.0055763774 ;
-		exact_stress[39][2] = 0.0052310443 ;
-		exact_stress[40][2] = 0.0050352572 ;
-		exact_stress[41][2] = 0.0046463504 ;
-		exact_stress[42][2] = 0.0040981050 ;
-		exact_stress[43][2] = 0.0036479719 ;
-		exact_stress[44][2] = 0.0033979405 ;
-		exact_stress[45][2] = 0.0029105400 ;
-		exact_stress[46][2] = 0.0022408608 ;
-		exact_stress[47][2] = 0.0017036021 ;
-		exact_stress[48][2] = 0.0014094027 ;
-		exact_stress[49][2] = 0.0008436114 ;
-		exact_stress[50][2] = 0.0000809760 ;
-		exact_stress[51][2] = -0.0005199539 ;
-		exact_stress[52][2] = -0.0008452773 ;
-		exact_stress[53][2] = -0.0014640177 ;
-		exact_stress[54][2] = -0.0022846610 ;
-		exact_stress[55][2] = -0.0029212624 ;
-		exact_stress[56][2] = -0.0032624007 ;
-		exact_stress[57][2] = -0.0039047089 ;
-		exact_stress[58][2] = -0.0047439129 ;
-		exact_stress[59][2] = -0.0053852558 ;
-		exact_stress[60][2] = -0.0057255286 ;
-		exact_stress[61][2] = -0.0063598176 ;
-		exact_stress[62][2] = -0.0071759966 ;
-		exact_stress[63][2] = -0.0077900917 ;
-		exact_stress[64][2] = -0.0081124627 ;
-		exact_stress[65][2] = -0.0087068719 ;
-		exact_stress[66][2] = -0.0094588601 ;
-		exact_stress[67][2] = -0.0100146343 ;
-		exact_stress[68][2] = -0.0103027647 ;
-		exact_stress[69][2] = -0.0108271310 ;
-		exact_stress[70][2] = -0.0114767267 ;
-		exact_stress[71][2] = -0.0119459378 ;
-		exact_stress[72][2] = -0.0121851901 ;
-		exact_stress[73][2] = -0.0126128931 ;
-		exact_stress[74][2] = -0.0131271764 ;
-		exact_stress[75][2] = -0.0134861088 ;
-		exact_stress[76][2] = -0.0136644178 ;
-		exact_stress[77][2] = -0.0139739485 ;
-		exact_stress[78][2] = -0.0143271865 ;
-		exact_stress[79][2] = -0.0145579929 ;
-		exact_stress[80][2] = -0.0146665365 ;
-		exact_stress[81][2] = -0.0148426682 ;
-		exact_stress[82][2] = -0.0150176638 ;
-		exact_stress[83][2] = -0.0151092563 ;
-		exact_stress[84][2] = -0.0151428787 ;
-		exact_stress[85][2] = -0.0151773615 ;
-		exact_stress[86][2] = -0.0151661623 ;
-		exact_stress[87][2] = -0.0151146039 ;
-		exact_stress[88][2] = -0.0150719694 ;
-		exact_stress[89][2] = -0.0149637186 ;
-		exact_stress[90][2] = -0.0147676664 ;
-		exact_stress[91][2] = -0.0145760606 ;
-		exact_stress[92][2] = -0.0144595440 ;
-		exact_stress[93][2] = -0.0142143403 ;
-		exact_stress[94][2] = -0.0138435022 ;
-		exact_stress[95][2] = -0.0135214270 ;
-		exact_stress[96][2] = -0.0133367684 ;
-		exact_stress[97][2] = -0.0129665311 ;
-		exact_stress[98][2] = -0.0124386065 ;
-		exact_stress[99][2] = -0.0120011751 ;
-		exact_stress[100][2] = -0.0117569450 ;
-		exact_stress[101][2] = -0.0112786715 ;
-		exact_stress[102][2] = -0.0106175056 ;
-		exact_stress[103][2] = -0.0100841577 ;
-		exact_stress[104][2] = -0.0097910926 ;
-		exact_stress[105][2] = -0.0092255757 ;
-		exact_stress[106][2] = -0.0084594300 ;
-		exact_stress[107][2] = -0.0078525736 ;
-		exact_stress[108][2] = -0.0075228427 ;
-		exact_stress[109][2] = -0.0068932845 ;
-		exact_stress[110][2] = -0.0060530163 ;
-		exact_stress[111][2] = -0.0053966326 ;
-		exact_stress[112][2] = -0.0050430978 ;
-		exact_stress[113][2] = -0.0043737300 ;
-		exact_stress[114][2] = -0.0034910205 ;
-		exact_stress[115][2] = -0.0028093355 ;
-		exact_stress[116][2] = -0.0024448557 ;
-		exact_stress[117][2] = -0.0017596614 ;
-		exact_stress[118][2] = -0.0008654085 ;
-		exact_stress[119][2] = -0.0001817122 ;
-		#endif
-
-		// 矩形のグローバル
-		// global = 8x8, gauss point = 4x4
-		# if 1
-		exact_stress[0][0] = 0.3978066152 ;
-		exact_stress[1][0] = 0.2776174894 ;
-		exact_stress[2][0] = 0.0752278028 ;
-		exact_stress[3][0] = -0.0296602207 ;
-		exact_stress[4][0] = -0.0659905077 ;
-		exact_stress[5][0] = -0.1077071692 ;
-		exact_stress[6][0] = -0.1309224809 ;
-		exact_stress[7][0] = -0.1370166360 ;
-		exact_stress[8][0] = -0.1382558518 ;
-		exact_stress[9][0] = -0.1387237370 ;
-		exact_stress[10][0] = -0.1378819309 ; 
-		exact_stress[11][0] = -0.1370934565 ; 
-		exact_stress[12][0] = -0.1367461154 ; 
-		exact_stress[13][0] = -0.1362875469 ; 
-		exact_stress[14][0] = -0.1360310196 ; 
-		exact_stress[15][0] = -0.1359957035 ; 
-		exact_stress[16][0] = -0.1359964304 ; 
-		exact_stress[17][0] = -0.1361090807 ; 
-		exact_stress[18][0] = -0.1369448332 ; 
-		exact_stress[19][0] = -0.1385281896 ; 
-		exact_stress[20][0] = -0.1398247963 ; 
-		exact_stress[21][0] = -0.1432760121 ; 
-		exact_stress[22][0] = -0.1499874746 ; 
-		exact_stress[23][0] = -0.1566994835 ; 
-		exact_stress[24][0] = -0.1606068284 ; 
-		exact_stress[25][0] = -0.1675450618 ; 
-		exact_stress[26][0] = -0.1707544969 ; 
-		exact_stress[27][0] = -0.1597596120 ; 
-		exact_stress[28][0] = -0.1445561856 ; 
-		exact_stress[29][0] = -0.0888596432 ; 
-		exact_stress[30][0] = 0.0395498449 ;
-		exact_stress[31][0] = 0.1222017639 ;
-				
-		exact_stress[0][1] = 10.15340309 ;
-		exact_stress[1][1] = 10.1985178 ;
-		exact_stress[2][1] = 10.25294709 ;
-		exact_stress[3][1] = 10.25945215 ;
-		exact_stress[4][1] = 10.25352872 ;
-		exact_stress[5][1] = 10.23380182 ;
-		exact_stress[6][1] = 10.20416764 ;
-		exact_stress[7][1] = 10.18419702 ;
-		exact_stress[8][1] = 10.17514312 ;
-		exact_stress[9][1] = 10.16125121 ;
-		exact_stress[10][1] = 10.14867009 ;
-		exact_stress[11][1] = 10.14255614 ;
-		exact_stress[12][1] = 10.14031026 ;
-		exact_stress[13][1] = 10.13760212 ;
-		exact_stress[14][1] = 10.13618714 ;
-		exact_stress[15][1] = 10.13599716 ;
-		exact_stress[16][1] = 10.13599498 ;
-		exact_stress[17][1] = 10.13595296 ;
-		exact_stress[18][1] = 10.13563026 ;
-		exact_stress[19][1] = 10.13496404 ;
-		exact_stress[20][1] = 10.13436212 ;
-		exact_stress[21][1] = 10.13248785 ;
-		exact_stress[22][1] = 10.12746 ;
-		exact_stress[23][1] = 10.11981222 ;
-		exact_stress[24][1] = 10.11342644 ;
-		exact_stress[25][1] = 10.0942999 ;
-		exact_stress[26][1] = 10.04465984 ;
-		exact_stress[27][1] = 9.972221403 ;
-		exact_stress[28][1] = 9.914764256 ;
-		exact_stress[29][1] = 9.760684751 ;
-		exact_stress[30][1] = 9.484314866 ;
-		exact_stress[31][1] = 9.326588534 ;
-				
-		exact_stress[0][2] = 0.039789578 ;
-		exact_stress[1][2] = 0.140779741 ;
-		exact_stress[2][2] = 0.142642973 ;
-		exact_stress[3][2] = 0.097476878 ;
-		exact_stress[4][2] = 0.071232001 ;
-		exact_stress[5][2] = 0.027837913 ;
-		exact_stress[6][2] = -0.012794217 ;
-		exact_stress[7][2] = -0.033296714 ;
-		exact_stress[8][2] = -0.041365645 ;
-		exact_stress[9][2] = -0.052508678 ;
-		exact_stress[10][2] = -0.061446065 ;
-		exact_stress[11][2] = -0.065425406 ;
-		exact_stress[12][2] = -0.066830013 ;
-		exact_stress[13][2] = -0.06848373 ;
-		exact_stress[14][2] = -0.069330574 ;
-		exact_stress[15][2] = -0.069443384 ;
-		exact_stress[16][2] = -0.069446231 ;
-		exact_stress[17][2] = -0.06963631 ;
-		exact_stress[18][2] = -0.071057815 ;
-		exact_stress[19][2] = -0.073807362 ;
-		exact_stress[20][2] = -0.076116772 ;
-		exact_stress[21][2] = -0.082541258 ;
-		exact_stress[22][2] = -0.096428777 ;
-		exact_stress[23][2] = -0.112911309 ;
-		exact_stress[24][2] = -0.124387043 ;
-		exact_stress[25][2] = -0.152178109 ;
-		exact_stress[26][2] = -0.202798794 ;
-		exact_stress[27][2] = -0.25131512 ;
-		exact_stress[28][2] = -0.277541051 ;
-		exact_stress[29][2] = -0.311727139 ;
-		exact_stress[30][2] = -0.255095637 ;
-		exact_stress[31][2] = -0.068071913 ;
-		#endif
-	}
-	else
-	{
-		printf("Error: Unknown type_load in Setting_Dist_Load_2D\n");
-		exit(1);
-	}
-
-
-    // 既存の範囲検索処理（変更なし）
-    if (iCoord == 0)
-        jCoord = 1;
-    else if (iCoord == 1)
-        jCoord = 0;
-
-    for (iii = info->Order[iPatch * info->DIMENSION + iCoord]; iii < info->No_knot[iPatch * info->DIMENSION + iCoord] - info->Order[iPatch * info->DIMENSION + iCoord] - 1; iii++)
-    {
-        double epsi = 0.00000000001;
-        if (info->Position_Knots[info->Total_Knot_to_patch_dim[iPatch * info->DIMENSION + iCoord] + iii] - epsi <= Range_Coord[0])
-            iPos[0] = iii;
-        if (info->Position_Knots[info->Total_Knot_to_patch_dim[iPatch * info->DIMENSION + iCoord] + iii + 1] - epsi <= Range_Coord[1])
-            iPos[1] = iii + 1;
-    }
-
-    if (iPos[0] < 0 || iPos[1] < 0)
-    {
-        printf("Error (Stop) iPos[0] = %d iPos[1] = %d\n", iPos[0], iPos[1]);
-        exit(1);
-    }
-
-    for (jjj = info->Order[iPatch * info->DIMENSION + jCoord]; jjj < info->No_knot[iPatch * info->DIMENSION + jCoord] - info->Order[iPatch * info->DIMENSION + jCoord] - 1; jjj++)
-    {
-        double epsi = 0.00000000001;
-        if (info->Position_Knots[info->Total_Knot_to_patch_dim[iPatch * info->DIMENSION + jCoord] + jjj] - epsi <= val_Coord
-            && info->Position_Knots[info->Total_Knot_to_patch_dim[iPatch * info->DIMENSION + jCoord] + jjj + 1] + epsi > val_Coord)
-        {
-            jPos[0] = jjj;
-            jPos[1] = jjj + 1;
-            val_jCoord_Local = -1.0 + 2.0 * (val_Coord - info->Position_Knots[info->Total_Knot_to_patch_dim[iPatch * info->DIMENSION + jCoord] + jjj])
-                             / (info->Position_Knots[info->Total_Knot_to_patch_dim[iPatch * info->DIMENSION + jCoord] + jjj + 1] - info->Position_Knots[info->Total_Knot_to_patch_dim[iPatch * info->DIMENSION + jCoord] + jjj]);
-        }
-    }
-
-    if (jPos[0] < 0 || jPos[1] < 0)
-    {
-        printf("Error (Stop) jPos[0] = %d jPos[1] = %d\n", jPos[0], jPos[1]);
-        exit(1);
-    }
-
-    // 要素収集処理（変更なし）
-    iii = 0;
-    if (iCoord == 1)
-    {
-        iX = jPos[0] - info->Order[iPatch * info->DIMENSION + 0];
-        for (iY = iPos[0] - info->Order[iPatch * info->DIMENSION + 1]; iY < iPos[1] - info->Order[iPatch * info->DIMENSION + 1]; iY++)
-        {
-            No_Element_for_Integration[iii] = SearchForElement_2D(mesh_n, iPatch, iX, iY, info);
-            iii++;
-        }
-    }
-    if (iCoord == 0)
-    {
-        iY = jPos[0] - info->Order[iPatch * info->DIMENSION + 1];
-        for (iX = iPos[0] - info->Order[iPatch * info->DIMENSION + 0]; iX < iPos[1] - info->Order[iPatch * info->DIMENSION + 0]; iX++)
-        {
-            No_Element_for_Integration[iii] = SearchForElement_2D(mesh_n, iPatch, iX, iY, info);
-            iii++;
-        }
-    }
-    No_Element_For_Dist_Load = iii;
-
-    // σ·n による表面力の計算と形状関数による節点力変換
-    for (iii = 0; iii < No_Element_For_Dist_Load; iii++)
-    {
-        if (info->Total_element_all_ID[No_Element_for_Integration[iii]] == 1)
-        {
-            iX = info->ENC[No_Element_for_Integration[iii] * info->DIMENSION + 0];
-            iY = info->ENC[No_Element_for_Integration[iii] * info->DIMENSION + 1];
-
-            for (ic = 0; ic < (info->Order[iPatch * info->DIMENSION + 0] + 1) * (info->Order[iPatch * info->DIMENSION + 1] + 1); ic++)
-                iControlpoint[ic] = info->Controlpoint_of_Element[No_Element_for_Integration[iii] * MAX_NO_CP_ON_ELEMENT + ic];
-
-            for (ig = 0; ig < GP_1D_load; ig++)
-            {
-                double Local_Coord[2], dxyzdge[3] = {0.0}, detJ;
-
-                Local_Coord[jCoord] = val_jCoord_Local;
-				Local_Coord[iCoord] = Gxi_1D_load[ig];
-
-				if (debug_flag)
-				{
-					double out_coord[2];
-					int element = No_Element_for_Integration[iii];
-					physical_coord(element, Local_Coord, out_coord, info);
-					printf("Element %d, point %d, Physical Coord: %f, %f\n", element, ig, out_coord[0], out_coord[1]);
-				}
-
-                // 境界での形状関数、微分ベクトル計算（線積分用）
-				vector<double> R(MAX_NO_CP_ON_ELEMENT);
-				vector<double> dR(MAX_NO_CP_ON_ELEMENT * info->DIMENSION);
-				shape_and_dshape(R.data(), dR.data(), Local_Coord, No_Element_for_Integration[iii], true, info);
-                for (int icc = 0; icc < (info->Order[iPatch * info->DIMENSION + 0] + 1) * (info->Order[iPatch * info->DIMENSION + 1] + 1); icc++)
-                {
-                    dxyzdge[0] += dR[icc * info->DIMENSION + iCoord] * info->Node_Coordinate[iControlpoint[icc] * (info->DIMENSION + 1) + 0];
-                    dxyzdge[1] += dR[icc * info->DIMENSION + iCoord] * info->Node_Coordinate[iControlpoint[icc] * (info->DIMENSION + 1) + 1];
-                }
-                detJ = sqrt(dxyzdge[0] * dxyzdge[0] + dxyzdge[1] * dxyzdge[1]);
-
-				// 境界面の法線ベクトルを計算
-				double normal[2];
-
-				// 境界面の向きを考慮して外向き法線を計算
-				if (iCoord == 0) // η = const 境界（水平境界）
-				{
-				    if (val_Coord > 0.5) // 上境界 (η = 1.0)
-				    {
-				        // 上向き法線: 接線ベクトルを反時計回りに90度回転
-				        normal[0] = -dxyzdge[1] / detJ;  // -dy/dξ
-				        normal[1] = dxyzdge[0] / detJ;   // dx/dξ
-				    }
-				    else // 下境界 (η = 0.0)
-				    {
-				        // 下向き法線: 接線ベクトルを時計回りに90度回転
-				        normal[0] = dxyzdge[1] / detJ;   // dy/dξ
-				        normal[1] = -dxyzdge[0] / detJ;  // -dx/dξ
-				    }
-				}
-				else if (iCoord == 1) // ξ = const 境界（垂直境界）
-				{
-				    if (val_Coord > 0.5) // 右境界 (ξ = 1.0)
-				    {
-				        // 右向き法線: 接線ベクトルを反時計回りに90度回転
-				        normal[0] = dxyzdge[1] / detJ;  // -dy/dη
-				        normal[1] = -dxyzdge[0] / detJ;   // dx/dη
-				    }
-				    else // 左境界 (ξ = 0.0)
-				    {
-				        // 左向き法線: 接線ベクトルを時計回りに90度回転
-				        normal[0] = dxyzdge[1] / detJ;   // dy/dη
-				        normal[1] = -dxyzdge[0] / detJ;  // -dx/dη
-				    }
-				}
-
-                // ガウス点での応力テンソルを取得
-                double stress_tensor[3] = {0.0}; // [σxx, σyy, τxy]
-                int stress_index = ig + iii * GP_1D_load;
-                stress_tensor[0] = exact_stress[stress_index][0]; // σxx
-                stress_tensor[1] = exact_stress[stress_index][1]; // σyy
-                stress_tensor[2] = exact_stress[stress_index][2]; // τxy
-
-                // トラクションベクトルを計算: t = σ · n
-                double traction[2];
-                traction[0] = stress_tensor[0] * normal[0] + stress_tensor[2] * normal[1]; // tx = σxx*nx + τxy*ny
-                traction[1] = stress_tensor[2] * normal[0] + stress_tensor[1] * normal[1]; // ty = τxy*nx + σyy*ny
-
-                // 形状関数の転置 × トラクション による等価節点力計算
-                for (ic = 0; ic < (info->Order[iPatch * info->DIMENSION + 0] + 1) * (info->Order[iPatch * info->DIMENSION + 1] + 1); ic++)
-                {
-                    // x方向節点力: N^T * tx
-					info->Equivalent_Nodal_Force[iControlpoint[ic] * info->DIMENSION + 0] += 
-						R[ic] * traction[0] * detJ * w_1D_load[ig];
-                    
-                    // y方向節点力: N^T * ty
-					info->Equivalent_Nodal_Force[iControlpoint[ic] * info->DIMENSION + 1] += 
-						R[ic] * traction[1] * detJ * w_1D_load[ig];
-                }
-            }
-        }
-    }
-}
-
-
-// 無限版円孔の境界条件付与に使用
-int SearchForElement_2D(int mesh_n, int iPatch, int iX, int iY, information *info)
-{
-	int iii;
-
-	for (iii = 0; iii < info->Total_Element_on_mesh[mesh_n]; iii++)
-	{
-		if (info->Element_patch[iii + info->Total_Element_to_mesh[mesh_n]] == iPatch)
-		{
-			if (iX == info->ENC[(iii + info->Total_Element_to_mesh[mesh_n]) * info->DIMENSION + 0] && iY == info->ENC[(iii + info->Total_Element_to_mesh[mesh_n]) * info->DIMENSION + 1])
-				goto loopend_2D;
-		}
-	}
-	loopend_2D:
-
-	return (iii);
-}
-
-
 // 要素のパラメータ座標からパッチのパラメータ座標を計算する関数
 void trans_ele_patch_coord(double* xi_patch, const double* xi_elem, int patch_num, int ele_num, information* info)
 {
@@ -4039,6 +3183,102 @@ void gp_switch(bool flag, information *info)
 	}
 }
 
+
+// First Inverese mapping: ニュートン法によってグローバルIGA解析モデルの物理座標から自然座標上のモデルを探索する
+void First_Inverse_mapping(information *info)
+{
+	int i,j,k;
+	double MAX_ITER = 1000;
+	double MAX_RESIDUAL = 1.0e-10;
+	double residual_norm = 0.0;
+	vector<double> para_patch_coord(info->DIMENSION, 0.5); // 初期値は自然座標の中心点
+
+	int vertex_num;
+	if (info->DIMENSION == 2)
+		vertex_num = 4;
+	else if (info->DIMENSION == 3)
+		vertex_num = 8;
+
+	int local_ele_num = info->Total_Element_to_mesh[Total_mesh] - info->Total_Element_to_mesh[Total_mesh - 1];
+	
+	for (i = 0; i < local_ele_num; i++)
+	{
+		for (j = 0; j < vertex_num; j++)
+		{
+			for (k = 0; k < MAX_ITER; k++)
+			{
+				// calculate residulal vector: R(ξ) = N(ξ) * X - x
+				vector<double> Residual_vector(info->DIMENSION);
+				vector<double> para_ele_coord(info->DIMENSION, 0.0);
+				vector<double> pc(info->DIMENSION, 0.0);
+
+				int temp_ele = ele_check(info->Global_local_patch, para_patch_coord.data(), info);
+				tilde_coord(para_ele_coord.data(), para_patch_coord.data(), info->Element_patch[temp_ele], temp_ele,info);
+				physical_coord(temp_ele, para_ele_coord.data(), pc.data(), info);
+				for (int d = 0; d < info->DIMENSION; d++)
+					Residual_vector[d] = pc[d] - info->Target_physical_coordinate[(i * vertex_num + j) * info->DIMENSION + d];
+
+				// compute norm (reset each iteration)
+				residual_norm = 0.0;
+				for (int d = 0; d < info->DIMENSION; d++)
+					residual_norm += Residual_vector[d] * Residual_vector[d];
+				residual_norm = sqrt(residual_norm);
+				// convergence check
+				if (residual_norm < MAX_RESIDUAL)
+				{
+					for (int d = 0; d < info->DIMENSION; d++)
+						info->Target_para_coordinate[(i * vertex_num + j) * info->DIMENSION + d] = para_patch_coord[d];
+					break;
+				}
+				
+				// calculate delta ξ: -(J)^{-1} * R(ξ)
+				vector<double> delta_para(info->DIMENSION, 0.0);
+				vector<double> Jacobian_inverse(info->DIMENSION * info->DIMENSION);
+				vector<double> dummy_B(MAX_NO_CP_ON_ELEMENT * info->DIMENSION);
+				Make_B_component(temp_ele, para_ele_coord.data(), dummy_B.data(), info, 1, Jacobian_inverse.data());
+
+				// Note: Jacobian is stored in column-major order (index = col*DIM + row)
+				for (int d = 0; d < info->DIMENSION; d++) {
+					double sum = 0.0;
+					for (int e = 0; e < info->DIMENSION; e++)
+						sum += Jacobian_inverse[e * info->DIMENSION + d] * Residual_vector[e];
+					delta_para[d] = -sum;
+				}
+				
+				// update ξ: ξ = ξ + delta ξ
+				for (int d = 0; d < info->DIMENSION; d++)
+					para_patch_coord[d] += delta_para[d];
+			}
+			if (k == MAX_ITER)
+			{
+				printf("ERROR: Maximum iterations reached without convergence for vertex %d of element %d\n", j, i);
+				exit(1);
+			}
+			else 
+				printf("Vertex %d of element %d converged in %d iterations with residual norm %e\n", j, i, k, residual_norm);
+		}
+	}
+}
+
+
+// Second Inverse mapping: 最小二乗法によって、ローカルIGA解析モデルの制御点を移動させる
+void Second_Inverse_mapping(int ele, double *para, double *x, information *info)
+{
+	vector<double> R(MAX_NO_CP_ON_ELEMENT);
+	vector<double> dR(MAX_NO_CP_ON_ELEMENT * info->DIMENSION);
+
+	shape_and_dshape(R.data(), dR.data(), para, ele, true, info);
+
+	for (int i = 0; i < info->DIMENSION; i++)
+	{
+		x[i] = 0.0;
+		for (int j = 0; j < info->No_Control_point_ON_ELEMENT[info->Element_patch[ele]]; j++)
+		{
+			int id = info->Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + j] * (info->DIMENSION + 1) + i;
+			x[i] += R[j] * info->Node_Coordinate[id];
+		}
+	}
+}
 
 // calcurate B
 double Make_B_component(int ele, double *para, double *out_B_component, information *info, int return_mode, double *out_a_matrix)

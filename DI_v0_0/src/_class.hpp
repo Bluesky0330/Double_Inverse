@@ -273,6 +273,11 @@ public:
 	// crack pair
 	int *crack_pair_n_to_mesh;
 	int *crack_pair;
+
+	// for inverse mapping
+	double *Target_Physical_Coord;
+	double *Target_Para_Coord;
+	double *New_Node_Coordinate;
 };
 
 
