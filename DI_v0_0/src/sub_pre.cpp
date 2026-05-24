@@ -119,14 +119,12 @@ void Allocation(const int num, information *info)
 		// general
 		info->c.GEOMETRY_ONLY_OUTPUT          = any_cast<int>(info->c.data_vec[0]);
 		info->c.OUTPUT_GLOBAL_PARAMETERS      = any_cast<int>(info->c.data_vec[1]);
-		info->c.OUTPUT_PARAVIEW               = any_cast<int>(info->c.data_vec[2]);
-		info->c.CALC_ON_GP                    = any_cast<int>(info->c.data_vec[3]);
-		info->c.CALC_ON_ELE_VERTEX            = any_cast<int>(info->c.data_vec[4]);
+		info->c.CALC_ON_ELE_VERTEX            = any_cast<int>(info->c.data_vec[2]);
 
 		// gaussian quadrature
-		info->c.USE_EXTENDED_QUADRATURE       = any_cast<int>(info->c.data_vec[5]);
-		info->c.NUM_GAUSS_POINTS              = any_cast<int>(info->c.data_vec[6]);
-		info->c.NUM_GAUSS_POINTS_EXTENDED     = any_cast<int>(info->c.data_vec[7]);
+		info->c.USE_EXTENDED_QUADRATURE       = any_cast<int>(info->c.data_vec[3]);
+		info->c.NUM_GAUSS_POINTS              = any_cast<int>(info->c.data_vec[4]);
+		info->c.NUM_GAUSS_POINTS_EXTENDED     = any_cast<int>(info->c.data_vec[5]);
 
 		info->Total_Knot_to_mesh = (int *)calloc((Total_mesh + 1), sizeof(int));
 		info->Total_Patch_on_mesh = (int *)malloc(sizeof(int) * (Total_mesh));			  // 各メッシュ上のパッチ数
@@ -385,10 +383,10 @@ void Allocation(const int num, information *info)
 		info->PhysicalCoordinate_at_GP = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * max_gp_per_element * info->DIMENSION, sizeof(double));
 		info->Strain_at_GP = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * max_gp_per_element * N_STRAIN, sizeof(double));
 		info->Stress_at_GP = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * max_gp_per_element * N_STRESS, sizeof(double));
-		info->Displacement_at_ele_vertex = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * pow_int(2, info->DIMENSION) * info->DIMENSION, sizeof(double));
-		info->Strain_at_ele_vertex = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * pow_int(2, info->DIMENSION) * N_STRAIN, sizeof(double));
-		info->Stress_at_ele_vertex = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * pow_int(2, info->DIMENSION) * N_STRESS, sizeof(double));
-		info->PhysicalCoordinate_at_ele_vertex = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * pow_int(2, info->DIMENSION) * info->DIMENSION, sizeof(double));
+		info->Displacement_at_ele_vertex = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * pow_int(3, info->DIMENSION) * info->DIMENSION, sizeof(double));
+		info->Strain_at_ele_vertex = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * pow_int(3, info->DIMENSION) * N_STRAIN, sizeof(double));
+		info->Stress_at_ele_vertex = (double *)calloc(info->Total_Element_to_mesh[Total_mesh] * pow_int(3, info->DIMENSION) * N_STRESS, sizeof(double));
+		info->PhysicalCoordinate_at_ele_vertex = (double *)calloc(info->Geo_Total_Element_on_mesh * pow_int(3, info->DIMENSION) * info->DIMENSION, sizeof(double));
 		info->ReactionForce = (double *)calloc(MAX_K_WHOLE_SIZE, sizeof(double)); // ReactionForce[MAX_K_WHOLE_SIZE]
 		if (info->Strain_at_GP == NULL || info->Stress_at_GP == NULL || info->ReactionForce == NULL)
 		{
@@ -399,8 +397,8 @@ void Allocation(const int num, information *info)
 	else if(num == 10)
 	{
 		// memory allocation
-		int Element_vertex = info->Total_Element_on_mesh[Total_mesh] - info->Total_Element_on_mesh[Total_mesh - 1];
-		Element_vertex *= pow_int(2, info->DIMENSION);
+		int Element_vertex = info->Geo_Total_Element_on_mesh;
+		Element_vertex *= pow_int(3, info->DIMENSION);
 		info->Target_Physical_Coord = (double *)malloc(sizeof(double) * Element_vertex * info->DIMENSION); // Target_Physical_Coord[Element_vertex][info->DIMENSION]
 		info->Target_Para_Coord = (double *)malloc(sizeof(double) * Element_vertex * info->DIMENSION); // Target_Para_Coord[Element_vertex][info->DIMENSION]
 		info->New_Node_Coordinate = (double *)malloc(sizeof(double) * (info->Geo_Total_Control_Point_on_mesh * (info->DIMENSION + 1)));
@@ -1278,27 +1276,27 @@ void Get_Input_3(const char *filename, information *info)
 	int temp_i, temp_i2;
 	double temp_d, temp_d2, temp_d3;
 	
-	int i,j,k;
+	int i,j;
 
 	// ローカルIGA解析モデルの要素数の取得
-	int local_ele_num = info->Total_Element_on_mesh[Total_mesh] - info->Total_Element_on_mesh[Total_mesh - 1];
+	int local_ele_num = info->Geo_Total_Element_on_mesh;
 	
 	// 要素頂点の数
 	int num_vertex;
 	if (info->DIMENSION == 2)
 	{
-		num_vertex = 4; // 2Dの場合、要素は4つの頂点を持つ
+		num_vertex = 9; // 2Dの場合、要素は9つの頂点を持つ
 	}
 	else if (info->DIMENSION == 3)
 	{
-		num_vertex = 8; // 3Dの場合、要素は8つの頂点を持つ
+		num_vertex = 27; // 3Dの場合、要素は27つの頂点を持つ
 	}
 
 	FILE *fp = fopen(filename, "r");
 	if (fp == NULL)
 	{
-		printf("Error: Could not open file %s\n", filename);
-		exit(1);
+		printf("warning: Could not open file %s\n", filename);
+		return;
 	}
 
 	// 一行目スキップ
@@ -1309,11 +1307,24 @@ void Get_Input_3(const char *filename, information *info)
 		for (j = 0; j < num_vertex; j++)
 		{
 			fscanf(fp, "%d %d %lf %lf %lf", &temp_i, &temp_i2, &temp_d, &temp_d2, &temp_d3);
-			info->Target_physical_coordinate[(i * num_vertex + j) * info->DIMENSION + 0] = temp_d;
-			info->Target_physical_coordinate[(i * num_vertex + j) * info->DIMENSION + 1] = temp_d2;
-			info->Target_physical_coordinate[(i * num_vertex + j) * info->DIMENSION + 2] = temp_d3;
+			info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 0] = temp_d;
+			info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 1] = temp_d2;
+			info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 2] = temp_d3;
 		}
 	fclose(fp);
+
+	// debug
+	// for (i = 0; i < local_ele_num; i++)
+	// {
+	// 	printf("Element %d:\n", i);
+	// 	for (j = 0; j < num_vertex; j++)
+	// 	{
+	// 		printf("  Vertex %d: (%le, %le, %le)\n", j,
+	// 			   info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 0],
+	// 			   info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 1],
+	// 			   info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 2]);
+	// 	}
+	// }
 }
 	
 
@@ -3185,7 +3196,7 @@ void gp_switch(bool flag, information *info)
 
 
 // First Inverese mapping: ニュートン法によってグローバルIGA解析モデルの物理座標から自然座標上のモデルを探索する
-void First_Inverse_mapping(information *info)
+void First_inverse_mapping(information *info)
 {
 	int i,j,k;
 	double MAX_ITER = 1000;
@@ -3195,11 +3206,11 @@ void First_Inverse_mapping(information *info)
 
 	int vertex_num;
 	if (info->DIMENSION == 2)
-		vertex_num = 4;
+		vertex_num = 9;
 	else if (info->DIMENSION == 3)
-		vertex_num = 8;
+		vertex_num = 27;
 
-	int local_ele_num = info->Total_Element_to_mesh[Total_mesh] - info->Total_Element_to_mesh[Total_mesh - 1];
+	int local_ele_num = info->Geo_Total_Element_on_mesh;
 	
 	for (i = 0; i < local_ele_num; i++)
 	{
@@ -3216,18 +3227,27 @@ void First_Inverse_mapping(information *info)
 				tilde_coord(para_ele_coord.data(), para_patch_coord.data(), info->Element_patch[temp_ele], temp_ele,info);
 				physical_coord(temp_ele, para_ele_coord.data(), pc.data(), info);
 				for (int d = 0; d < info->DIMENSION; d++)
-					Residual_vector[d] = pc[d] - info->Target_physical_coordinate[(i * vertex_num + j) * info->DIMENSION + d];
+					Residual_vector[d] = pc[d] - info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d];
 
 				// compute norm (reset each iteration)
 				residual_norm = 0.0;
 				for (int d = 0; d < info->DIMENSION; d++)
 					residual_norm += Residual_vector[d] * Residual_vector[d];
 				residual_norm = sqrt(residual_norm);
+
+				// debug
+				printf("Element %d, Vertex %d, Iteration %d: para_patch_coord = (", i, j, k);
+				for (int d = 0; d < info->DIMENSION; d++)
+				    printf("%f ", para_patch_coord[d]);
+				printf(")\n");
+
+				// printf("Element %d, Vertex %d, Iteration %d: Residual Norm = %e\n", i, j, k, residual_norm);
+
 				// convergence check
 				if (residual_norm < MAX_RESIDUAL)
 				{
 					for (int d = 0; d < info->DIMENSION; d++)
-						info->Target_para_coordinate[(i * vertex_num + j) * info->DIMENSION + d] = para_patch_coord[d];
+						info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + d] = para_patch_coord[d];
 					break;
 				}
 				
@@ -3248,6 +3268,15 @@ void First_Inverse_mapping(information *info)
 				// update ξ: ξ = ξ + delta ξ
 				for (int d = 0; d < info->DIMENSION; d++)
 					para_patch_coord[d] += delta_para[d];
+
+				// ξは0.0~1.0の間しかとらない。超える場合は最小、または最大値に修正
+				for (int d = 0; d < info->DIMENSION; d++)
+				{
+					if (para_patch_coord[d] >= 1.0)
+						para_patch_coord[d] = 1.0;
+					if (para_patch_coord[d] <= 0.0)
+						para_patch_coord[d] = 0.0;
+				}
 			}
 			if (k == MAX_ITER)
 			{
@@ -3258,24 +3287,123 @@ void First_Inverse_mapping(information *info)
 				printf("Vertex %d of element %d converged in %d iterations with residual norm %e\n", j, i, k, residual_norm);
 		}
 	}
+	// debug
+	for (i = 0; i < local_ele_num; i++)
+	{
+		for (j = 0; j < vertex_num; j++)
+		{
+			printf("Element %d, Vertex %d: Target Physical Coord = (", i, j);
+			for (int d = 0; d < info->DIMENSION; d++)
+				printf("%f ", info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d]);
+			printf("), Target Para Coord = (");
+			for (int d = 0; d < info->DIMENSION; d++)
+				printf("%f ", info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + d]);
+			printf(")\n");
+		}
+	}
 }
 
 
 // Second Inverse mapping: 最小二乗法によって、ローカルIGA解析モデルの制御点を移動させる
-void Second_Inverse_mapping(int ele, double *para, double *x, information *info)
+void Second_inverse_mapping(information *info)
 {
-	vector<double> R(MAX_NO_CP_ON_ELEMENT);
-	vector<double> dR(MAX_NO_CP_ON_ELEMENT * info->DIMENSION);
+	const int fasten_flag_x = 0; // 0: fasten, 1: calculate
+	const int fasten_flag_y = 0; // 0: fasten, 1: calculate
+	const int fasten_flag_z = 1; // 0: fasten, 1: calculate
+	const int element_num = info->Geo_Total_Element_on_mesh;
+	const int sample_num = (info->DIMENSION == 2) ? 9 : 27;
 
-	shape_and_dshape(R.data(), dR.data(), para, ele, true, info);
-
-	for (int i = 0; i < info->DIMENSION; i++)
+	for (int cp = 0; cp < info->Geo_Total_Control_Point_on_mesh; cp++)
 	{
-		x[i] = 0.0;
-		for (int j = 0; j < info->No_Control_point_ON_ELEMENT[info->Element_patch[ele]]; j++)
+		for (int d = 0; d < info->DIMENSION + 1; d++)
+			info->New_Node_Coordinate[cp * (info->DIMENSION + 1) + d] = info->Geo_Node_Coordinate[cp * (info->DIMENSION + 1) + d];
+	}
+
+	for (int ele = 0; ele < element_num; ele++)
+	{
+		const int patch = info->Element_patch[ele];
+		const int cp_num = info->No_Control_point_ON_ELEMENT[patch];
+
+		vector<double> shape_matrix(sample_num * cp_num, 0.0);
+		vector<double> target(sample_num * info->DIMENSION, 0.0);
+
+		for (int j = 0; j < sample_num; j++)
 		{
-			int id = info->Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + j] * (info->DIMENSION + 1) + i;
-			x[i] += R[j] * info->Node_Coordinate[id];
+			vector<double> vertex_para(info->DIMENSION, 0.0);
+			if (info->DIMENSION == 2)
+			{
+				const double sample_coord[9][2] = {
+					{-1.0, -1.0}, {0.0, -1.0}, {1.0, -1.0},
+					{-1.0,  0.0}, {0.0,  0.0}, {1.0,  0.0},
+					{-1.0,  1.0}, {0.0,  1.0}, {1.0,  1.0}
+				};
+				vertex_para[0] = sample_coord[j][0];
+				vertex_para[1] = sample_coord[j][1];
+			}
+			else if (info->DIMENSION == 3)
+			{
+				const double sample_coord[27][3] = {
+					{-1.0, -1.0, -1.0}, { 0.0, -1.0, -1.0}, { 1.0, -1.0, -1.0},
+					{-1.0,  0.0, -1.0}, { 0.0,  0.0, -1.0}, { 1.0,  0.0, -1.0},
+					{-1.0,  1.0, -1.0}, { 0.0,  1.0, -1.0}, { 1.0,  1.0, -1.0},
+
+					{-1.0, -1.0,  0.0}, { 0.0, -1.0,  0.0}, { 1.0, -1.0,  0.0},
+					{-1.0,  0.0,  0.0}, { 0.0,  0.0,  0.0}, { 1.0,  0.0,  0.0},
+					{-1.0,  1.0,  0.0}, { 0.0,  1.0,  0.0}, { 1.0,  1.0,  0.0},
+
+					{-1.0, -1.0,  1.0}, { 0.0, -1.0,  1.0}, { 1.0, -1.0,  1.0},
+					{-1.0,  0.0,  1.0}, { 0.0,  0.0,  1.0}, { 1.0,  0.0,  1.0},
+					{-1.0,  1.0,  1.0}, { 0.0,  1.0,  1.0}, { 1.0,  1.0,  1.0}
+				};
+				vertex_para[0] = sample_coord[j][0];
+				vertex_para[1] = sample_coord[j][1];
+				vertex_para[2] = sample_coord[j][2];
+			}
+
+			vector<double> R(MAX_NO_CP_ON_ELEMENT, 0.0);
+			vector<double> dR(MAX_NO_CP_ON_ELEMENT * info->DIMENSION, 0.0);
+			geo_shape_and_dshape(R.data(), dR.data(), vertex_para.data(), ele, true, info);
+
+			for (int cp = 0; cp < cp_num; cp++)
+				shape_matrix[j * cp_num + cp] = R[cp];
+
+			for (int d = 0; d < info->DIMENSION; d++)
+				target[j * info->DIMENSION + d] = info->Target_Para_Coord[(ele * sample_num + j) * info->DIMENSION + d];
+		}
+
+		// Solve normal equations: (A^T * A) * x = A^T * b
+		for (int d = 0; d < info->DIMENSION; d++)
+		{
+			if ((d == 0 && fasten_flag_x == 0) || (d == 1 && fasten_flag_y == 0) || (d == 2 && fasten_flag_z == 0))
+				continue;
+
+			vector<double> normal_matrix(cp_num * cp_num, 0.0);
+			vector<double> rhs(cp_num, 0.0);
+			vector<double> solution(cp_num, 0.0);
+
+			for (int cp1 = 0; cp1 < cp_num; cp1++)
+			{
+				for (int cp2 = 0; cp2 < cp_num; cp2++)
+				{
+					double sum = 0.0;
+					for (int v = 0; v < sample_num; v++)
+						sum += shape_matrix[v * cp_num + cp1] * shape_matrix[v * cp_num + cp2];
+					normal_matrix[cp1 * cp_num + cp2] = sum;
+				}
+
+				double sum = 0.0;
+					for (int v = 0; v < sample_num; v++)
+					sum += shape_matrix[v * cp_num + cp1] * target[v * info->DIMENSION + d];
+				rhs[cp1] = sum;
+			}
+
+			GaussianElimination(solution.data(), rhs.data(), normal_matrix.data(), cp_num);
+
+			for (int cp = 0; cp < cp_num; cp++)
+			{
+				const int global_cp = info->Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + cp];
+				info->New_Node_Coordinate[global_cp * (info->DIMENSION + 1) + d] = solution[cp];
+			}
 		}
 	}
 }
@@ -3450,7 +3578,7 @@ double Make_B_component_for_SSIGA(int ele_disp, double *para_disp, double *out_B
 				c_2x2[i * 2 + j] = 0.0;
 				for (int k = 0; k < 2; k++)
                 {
-                    c_2x2[i * 2 + j] += b_2x2[i * 2 + k] * a_2x2[k * 2 + j];
+					c_2x2[i * 2 + j] += b_2x2[i * 2 + k] * a_2x2[k * 2 + j];
                 }
             }
         }

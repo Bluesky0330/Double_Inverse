@@ -1,7 +1,8 @@
-PROGRAM_NAME = SSIGA
+PROGRAM_NAME = DI
 
 # INPUT_NAME := SCCHP_v3_coarse
-INPUT_NAME := SCCHP_v6_coarse
+# INPUT_NAME := SCCHP_v6_coarse
+INPUT_NAME := SCCHP_v7_coarse
 
 # 出力ディレクトリをインプット名から自動生成
 OUTPUT_DIR := output_$(INPUT_NAME)
@@ -36,21 +37,21 @@ compile:
 compile_optimized:
 	cd ./src_fast && ./build.sh
 
-SSIGA: compile rm mkdir_output
-	cd ./analysis/material && ./cp.sh ./option_SSIGA.ini
-	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input_glo.txt ../input/$(INPUT_NAME)/input_loc.txt ./option_SSIGA.ini $(COMMANDS2)
+DI: compile rm mkdir_output
+	cd ./analysis/material && ./cp.sh ./option_DI.ini
+	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input_glo.txt ../input/$(INPUT_NAME)/input_loc.txt ../input/$(INPUT_NAME)/input_vertex.txt ./option_DI.ini $(COMMANDS2)
 
-SSIGA_optimized: compile_optimized rm mkdir_output
-	cd ./analysis/material && ./cp.sh ./option_SSIGA.ini
-	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src_fast/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input_glo.txt ../input/$(INPUT_NAME)/input_loc.txt ./option_SSIGA.ini $(COMMANDS2)
+DI_optimized: compile_optimized rm mkdir_output
+	cd ./analysis/material && ./cp.sh ./option_DI.ini
+	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src_fast/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input_glo.txt ../input/$(INPUT_NAME)/input_loc.txt ../input/$(INPUT_NAME)/input_vertex.txt ./option_DI.ini $(COMMANDS2)
 
 IGA: compile rm mkdir_output
 	cd ./analysis/material && ./cp.sh ./option_IGA.ini
 	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input.txt ./option_IGA.ini $(COMMANDS2)
 
 debug: compile rm mkdir_output
-	cd ./analysis/material && ./cp.sh ./option_SSIGA.ini
-	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input_glo.txt ../input/$(INPUT_NAME)/input_loc.txt ./option_SSIGA.ini $(COMMANDS2)
+	cd ./analysis/material && ./cp.sh ./option_DI.ini
+	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input_glo.txt ../input/$(INPUT_NAME)/input_loc.txt ../input/$(INPUT_NAME)/input_vertex.txt ./option_DI.ini $(COMMANDS2)
 
 # for paraview
 view_0:

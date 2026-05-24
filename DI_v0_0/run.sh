@@ -112,6 +112,7 @@ else
         echo -e "${P_LOC} ${RED}強制再実行モード (-f)${RESET}"
     else
         # 通常フロー: 未回収ファイルの確認
+        mkdir -p "$SCRIPT_DIR/analysis/$OUTPUT_SUBDIR"
         UNSYNCED_COUNT=$(rsync -nai "$HOST:$REMOTE_DIR/analysis/$OUTPUT_SUBDIR/" "$SCRIPT_DIR/analysis/$OUTPUT_SUBDIR/" | grep '^>f' | wc -l || true)
 
         if [ "$UNSYNCED_COUNT" -gt 0 ]; then

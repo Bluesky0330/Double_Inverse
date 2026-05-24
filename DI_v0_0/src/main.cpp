@@ -25,7 +25,7 @@ int main(int argc, char **argv)
 
 	information info;
 	int alloc_count = 0, glo_var_count = 0;
-	Total_mesh = argc - 2;
+	Total_mesh = argc - 3;
 
 	cout << Total_mesh << " input files detected." << endl << endl;
 
@@ -51,17 +51,30 @@ int main(int argc, char **argv)
 		printf("Argument is missing\n\n");
 	else if (Total_mesh == 1)
 		printf("IGA carried out.(No local mesh)\n\n");
-	else if (Total_mesh >= 2)
-		printf("SS-IGA carried out.(%d local meshes)\n\n", Total_mesh - 1);
+	else if (Total_mesh == 2)
+		printf("SS-IGA model data carried out.(%d input files)\n\n", Total_mesh);
+	else
+	{
+		printf("Too many input files. Maximum is 4.\n\n");
+		exit(0);
+	}
 
 	printf("start Get Input Data\n\n");
 
 	// memory allocation
+	printf("before first Allocation\n");
+	fflush(stdout);
 	Allocation(alloc_count++, &info);
 
 	// Read file 1st time
 	for (int i = 0; i < Total_mesh; i++)
+	{
+		printf("before Get_Input_1 mesh=%d\n", i);
+		fflush(stdout);
 		Get_Input_1(i, argv[i + 1], &info);
+		printf("after Get_Input_1 mesh=%d\n", i);
+		fflush(stdout);
+	}
 
 	// memory allocation
 	Allocation(alloc_count++, &info);
@@ -71,8 +84,9 @@ int main(int argc, char **argv)
 		Get_Input_2(i, argv[i + 1], &info);
 
 	// Read file 3rd time
-	Allocation(10++, &info);
-	Get_Input_3(argv[2], &info);
+	printf("\nstart reading vertex data\n");
+	Allocation(10, &info);
+	Get_Input_3(argv[argc - 2], &info);
 
 	// MAX value
 	Global_var(glo_var_count++, &info);
@@ -109,11 +123,16 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	// MAX_K_WHOLE_SIZE
-	Global_var(glo_var_count++, &info);
-
 	// memory allocation
 	Allocation(alloc_count++, &info);
+
+	// for output vertex
+	if (info.c.CALC_ON_ELE_VERTEX == 1)
+	{
+		Allocation(9, &info);
+		printf("start calc on element vertex\n\n");
+		Calc_on_Element_Vertex(&info);
+	}
 
 	// check geometry only output
 	bool isGeometryOnly = (info.c.GEOMETRY_ONLY_OUTPUT == 1) ? true : false;
@@ -144,22 +163,25 @@ int main(int argc, char **argv)
 	}
 
 	// make connectivity
-	printf("start Make_connectivity\n");
-	Allocation(alloc_count++, &info);
-	Allocation(alloc_count++, &info);
+	printf("start Make_connectivity\n\n");
+	Allocation(7, &info);
+	Allocation(8, &info);
 	Make_connectivity(&info);
 
+	printf("start output_for_paraview_timestep\n\n");
+	output_for_paraview_timestep(&info, isGeometryOnly, 0.0); // start time = 0.0
+
 	// first Inverse mapping
+	printf("start first inverse mapping\n\n");
 	First_inverse_mapping(&info);
 
 	// second Inverse mapping
+	printf("start second inverse mapping\n\n");
 	Second_inverse_mapping(&info);
 
 	// output as new imput file
+	printf("start output new input file\n\n");
 	Output_new_input_file(&info);
-
-	printf("start output_for_paraview_timestep\n");
-	output_for_paraview_timestep(&info, isGeometryOnly, 0.0); // start time = 0.0
 
 	end[1] = chrono::system_clock::now();
 	time = (double)(chrono::duration_cast<chrono::milliseconds>(end[1] - start[1]).count()) / 1000.0;

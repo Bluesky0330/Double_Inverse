@@ -48,551 +48,129 @@ void Output_Displacement(information *info)
 
 void Calc_on_Element_Vertex(information *info)
 {	
-	FILE *fp_disp, *fp_strain, *fp_stress, *fp_pc;
-	fp_disp   = fopen("_Displacement_overlay_at_ele_vertex.dat", "w");
-	fp_strain = fopen("_Strain_overlay_at_ele_vertex.dat", "w");
-	fp_stress = fopen("_Stress_overlay_at_ele_vertex.dat", "w");
-	fp_pc     = fopen("_PhysicalCoordinate_at_ele_vertex.dat", "w");
+	FILE *fp_pc = fopen("_PhysicalCoordinate_at_ele_vertex.txt", "w");
+	if (fp_pc == NULL)
+	{
+		printf("Cannot open _PhysicalCoordinate_at_ele_vertex.txt\n");
+		exit(1);
+	}
 	if (info->DIMENSION == 2)
 	{
-		fprintf(fp_disp,   "要素番号\t頂点番号\tdisp_x\tdisp_y\n");
-		fprintf(fp_strain, "要素番号\t頂点番号\txx\tyy\txy\tzz\n");
-		fprintf(fp_stress, "要素番号\t頂点番号\txx\tyy\txy\tzz\n");
-		fprintf(fp_pc,     "要素番号\t頂点番号\tx\ty\n");
+		fprintf(fp_pc, "要素番号\t点番号\tx\ty\n");
 	}
 	else if (info->DIMENSION == 3)
 	{
-		fprintf(fp_disp,   "要素番号\t頂点番号\tdisp_x\tdisp_y\tdisp_z\n");
-		fprintf(fp_strain, "要素番号\t頂点番号\txx\tyy\tzz\txy\tyz\txz\n");
-		fprintf(fp_stress, "要素番号\t頂点番号\txx\tyy\tzz\txy\tyz\txz\n");
-		fprintf(fp_pc,     "要素番号\t頂点番号\tx\ty\tz\n");
+		fprintf(fp_pc, "要素番号\t点番号\tx\ty\tz\n");
 	}
 
-	int vertex_n = pow_int(2, info->DIMENSION);
+	int vertex_n = pow_int(3, info->DIMENSION);
 	vector<double> point_array(vertex_n * info->DIMENSION);
 
-	int counter = 0;
 	if (info->DIMENSION == 2)
 	{
-		point_array[counter] = -1.0;	point_array[counter + 1] = -1.0;	counter += 2;
-		point_array[counter] =  1.0;	point_array[counter + 1] = -1.0;	counter += 2;
-		point_array[counter] = -1.0;	point_array[counter + 1] =  1.0;	counter += 2;
-		point_array[counter] =  1.0;	point_array[counter + 1] =  1.0;
+		const double sample_coord[9][2] = {
+			{-1.0, -1.0}, {0.0, -1.0}, {1.0, -1.0},
+			{-1.0,  0.0}, {0.0,  0.0}, {1.0,  0.0},
+			{-1.0,  1.0}, {0.0,  1.0}, {1.0,  1.0}
+		};
+		for (int point = 0; point < vertex_n; point++)
+		{
+			point_array[point * info->DIMENSION + 0] = sample_coord[point][0];
+			point_array[point * info->DIMENSION + 1] = sample_coord[point][1];
+		}
 	}
 	else if (info->DIMENSION == 3)
 	{
-		point_array[counter] = -1.0;	point_array[counter + 1] = -1.0;	point_array[counter + 2] = -1.0;	counter += 3;
-		point_array[counter] =  1.0;	point_array[counter + 1] = -1.0;	point_array[counter + 2] = -1.0;	counter += 3;
-		point_array[counter] = -1.0;	point_array[counter + 1] =  1.0;	point_array[counter + 2] = -1.0;	counter += 3;
-		point_array[counter] =  1.0;	point_array[counter + 1] =  1.0;	point_array[counter + 2] = -1.0;	counter += 3;
-
-		point_array[counter] = -1.0;	point_array[counter + 1] = -1.0;	point_array[counter + 2] = 	1.0;	counter += 3;
-		point_array[counter] =  1.0;	point_array[counter + 1] = -1.0;	point_array[counter + 2] = 	1.0; 	counter += 3;
-		point_array[counter] = -1.0;	point_array[counter + 1] =  1.0;	point_array[counter + 2] = 	1.0; 	counter += 3;
-		point_array[counter] =  1.0;	point_array[counter + 1] =  1.0;	point_array[counter + 2] = 	1.0;
+		const double sample_coord[27][3] = {
+			{-1.0, -1.0, -1.0}, { 0.0, -1.0, -1.0}, { 1.0, -1.0, -1.0},
+			{-1.0,  0.0, -1.0}, { 0.0,  0.0, -1.0}, { 1.0,  0.0, -1.0},
+			{-1.0,  1.0, -1.0}, { 0.0,  1.0, -1.0}, { 1.0,  1.0, -1.0},
+			{-1.0, -1.0,  0.0}, { 0.0, -1.0,  0.0}, { 1.0, -1.0,  0.0},
+			{-1.0,  0.0,  0.0}, { 0.0,  0.0,  0.0}, { 1.0,  0.0,  0.0},
+			{-1.0,  1.0,  0.0}, { 0.0,  1.0,  0.0}, { 1.0,  1.0,  0.0},
+			{-1.0, -1.0,  1.0}, { 0.0, -1.0,  1.0}, { 1.0, -1.0,  1.0},
+			{-1.0,  0.0,  1.0}, { 0.0,  0.0,  1.0}, { 1.0,  0.0,  1.0},
+			{-1.0,  1.0,  1.0}, { 0.0,  1.0,  1.0}, { 1.0,  1.0,  1.0}
+		};
+		for (int point = 0; point < vertex_n; point++)
+		{
+			point_array[point * info->DIMENSION + 0] = sample_coord[point][0];
+			point_array[point * info->DIMENSION + 1] = sample_coord[point][1];
+			point_array[point * info->DIMENSION + 2] = sample_coord[point][2];
+		}
 	}
 
-	for (int i = 0; i < info->Total_Element_to_mesh[Total_mesh]; i++)
+	for (int i = 0; i < info->Geo_Total_Element_on_mesh; i++)
 	{
 		for (int j = 0; j < vertex_n; j++)
 		{
 			double temp_point[MAX_DIMENSION] = {0.0};
-			double temp_point_glo[MAX_DIMENSION] = {0.0};
-			double temp_para_glo[MAX_DIMENSION] = {0.0};
-			double temp_point_loc[MAX_DIMENSION] = {0.0};
-			double temp_para_loc[MAX_DIMENSION] = {0.0};
 
 			int element = i;
 			int point = j;
 
-			// for SSIGA local
-			double geo_coord_tilde[MAX_DIMENSION] = {0.0};	//ローカルジオメトリ表現の要素パラメータ座標
-			int geo_element = 0;							//ローカルジオメトリ表現の要素番号
-
 			// make temp_point
 			for (int j = 0; j < info->DIMENSION; j++)
 				temp_point[j] = point_array[point * info->DIMENSION + j];
-			
-			if (i < info->Total_Element_on_mesh[0]) // IGA or SSIGA global
-			{
-				vector<double> R(MAX_NO_CP_ON_ELEMENT);
-				vector<double> bl(D_MATRIX_SIZE * MAX_KIEL_SIZE);
-				vector<double> u(MAX_NO_CP_ON_ELEMENT * info->DIMENSION, 0.0);
-				shape_and_dshape(R.data(), temp_point, element, info);
-				Make_B_Linear(element, temp_point, bl.data(), info);
-				for (int k = 0; k < info->No_Control_point_ON_ELEMENT[info->Element_patch[element]]; k++)
-					for (int l = 0; l < info->DIMENSION; l++)
-					{
-						double d = info->Displacement[info->Controlpoint_of_Element[element * MAX_NO_CP_ON_ELEMENT + k] * info->DIMENSION + l];
-						info->PhysicalCoordinate_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] += R[k] * info->Node_Coordinate[info->Controlpoint_of_Element[element * MAX_NO_CP_ON_ELEMENT + k] * (info->DIMENSION + 1) + l];
-						info->Displacement_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] += R[k] * d;
-						u[k * info->DIMENSION + l] = d;
-					}
-				// strain
-				for (int k= 0; k < D_MATRIX_SIZE; k++)
-					for (int l = 0; l < info->No_Control_point_ON_ELEMENT[info->Element_patch[element]]; l++)
-						for (int m = 0; m < info->DIMENSION; m++)
-							info->Strain_at_ele_vertex[(element * vertex_n + point) * N_STRESS + k] += bl[k * MAX_KIEL_SIZE + l * info->DIMENSION + m] * u[l * info->DIMENSION + m];
-			}
-			if (i >= info->Total_Element_on_mesh[0] && Total_mesh > 1)
-			{
-				int patch_num = info->Element_patch[element];							//要素番号からパッチ番号を取得
-				int geo_patch_num = patch_num - info->Total_Patch_on_mesh[0];			//ジオメトリ表現のパッチ番号は、ローカルのパッチ番号と常に等しい
-				double coord[MAX_DIMENSION] = {0.0};
-				double out_coord[MAX_DIMENSION] = {0.0};									//ローカルのパッチパラメータ座標
-				double coord_tilde[MAX_DIMENSION] = {0.0};								//ローカルの要素パラメータ座標
-				double glo_coord_tilde[MAX_DIMENSION] = {0.0};							//グローバルの要素パラメータ座標
-				double Parameter_coord_at_ele_vertex[MAX_DIMENSION] = {0.0};			//要素のパラメータ座標	
-			
-				std::copy(temp_point, temp_point + info->DIMENSION, coord_tilde);				//要素のパラメータ座標をガウス点座標に変換
-				trans_ele_patch_coord(coord, coord_tilde, patch_num, element, info);			//要素のパラメータ座標をパッチのパラメータ座標に変換
-				geo_element = geo_ele_check(geo_patch_num, coord, info);						//パラメータ座標から、要素を探索
-				geo_tilde_coord(geo_coord_tilde, coord, geo_patch_num, geo_element, info);		//パッチパラメータ座標を、ジオメトリ要素パラメータ座標に変換
-			
-				vector<double> R_geo(MAX_NO_CP_ON_ELEMENT);
-				vector<double> R_disp(MAX_NO_CP_ON_ELEMENT);
-				vector<double> bl(D_MATRIX_SIZE * MAX_KIEL_SIZE);
-				vector<double> u(MAX_KIEL_SIZE * info->DIMENSION, 0.0);
-				geo_shape_and_dshape(R_geo.data(), geo_coord_tilde, geo_element, info);
-				Bspline_shape_and_dshape(R_disp.data(), temp_point, element, info);
-				Make_B_Linear(element, temp_point, bl.data(), info);
-			
-				// physical coordinate
-				for (int k = 0; k < info->Geo_No_Control_point_ON_ELEMENT[info->Geo_Element_patch[geo_element]]; k++)
-					for (int l = 0; l < info->DIMENSION; l++)
-						Parameter_coord_at_ele_vertex[l] += R_geo[k] * info->Geo_Node_Coordinate[info->Geo_Controlpoint_of_Element[geo_element * MAX_NO_CP_ON_ELEMENT + k] * (info->DIMENSION + 1) + l];
-				int ele_glo = ele_check(info->Global_local_patch, Parameter_coord_at_ele_vertex, info);
-				tilde_coord(glo_coord_tilde, Parameter_coord_at_ele_vertex, info->Global_local_patch, ele_glo, info);
-				physical_coord(ele_glo, glo_coord_tilde, out_coord, info);
+
+			double out_coord[MAX_DIMENSION] = {0.0};								//ローカルのパッチパラメータ座標
+			double glo_coord_tilde[MAX_DIMENSION] = {0.0};							//グローバルの要素パラメータ座標
+			double Parameter_coord_at_ele_vertex[MAX_DIMENSION] = {0.0};			//要素のパラメータ座標	
+		
+			vector<double> R_geo(MAX_NO_CP_ON_ELEMENT);
+			geo_shape_and_dshape(R_geo.data(), temp_point, element, info);
+		
+			// local geometry coordinate
+			for (int k = 0; k < info->Geo_No_Control_point_ON_ELEMENT[info->Geo_Element_patch[element]]; k++)
 				for (int l = 0; l < info->DIMENSION; l++)
-					info->PhysicalCoordinate_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] = out_coord[l];
-			
-				// displacement
-				for (int k = 0; k < info->No_Control_point_ON_ELEMENT[info->Element_patch[element]]; k++)
-					for (int l = 0; l < info->DIMENSION; l++)
-					{
-						double d = info->Displacement[info->Controlpoint_of_Element[element * MAX_NO_CP_ON_ELEMENT + k] * info->DIMENSION + l];
-						info->Displacement_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] += R_disp[k] * d;
-						u[k * info->DIMENSION + l] = d;
-					}
-				
-				// strain
-				for (int k = 0; k < D_MATRIX_SIZE; k++)
-					for (int l = 0; l < info->No_Control_point_ON_ELEMENT[info->Element_patch[element]]; l++)
-						for (int m = 0; m < info->DIMENSION; m++)
-							info->Strain_at_ele_vertex[(element * vertex_n + point) * N_STRESS + k] += bl[k * MAX_KIEL_SIZE + l * info->DIMENSION + m] * u[l * info->DIMENSION + m];
-			}
-			// overlay global
-			int status_glo_overlay = 0;
-			if (i < info->Total_Element_on_mesh[0] && Total_mesh > 1 && info->Element_patch[element] == info->Global_local_patch)
-			{
-				double temp_point_patch[MAX_DIMENSION] = {0.0};
-				trans_ele_patch_coord(temp_point_patch, temp_point, info->Element_patch[element], element, info);
-
-				// make temp_point_glo
-				int itr_n = 0, loc_patch = 0;
-				for (int k = info->Total_Patch_to_mesh[1]; k < info->Total_Patch_to_mesh[Total_mesh]; k++)
-				{
-					itr_n = calc_local_patch_parameter_coord(temp_point_patch, k, temp_para_loc, info);
-					loc_patch = k;
-					if (itr_n != ERROR)
-					{
-						status_glo_overlay = 1;
-						break;
-					}
-				}
-
-				int element_loc = 0;
-				if (status_glo_overlay)
-				{
-					element_loc = ele_check(loc_patch, temp_para_loc, info);
-					tilde_coord(temp_point_loc, temp_para_loc, loc_patch, element_loc, info);
-				}
-
-				// overlay displacement
-				if (status_glo_overlay)
-				{
-					vector<double> R_loc(MAX_NO_CP_ON_ELEMENT);
-					vector<double> bl_loc(D_MATRIX_SIZE * MAX_KIEL_SIZE);
-					vector<double> u_loc(MAX_KIEL_SIZE * info->DIMENSION, 0.0);
-					Bspline_shape_and_dshape(R_loc.data(), temp_point_loc, element_loc, info);
-					Make_B_Linear(element_loc, temp_point_loc, bl_loc.data(), info);
-					for (int k = 0; k < info->No_Control_point_ON_ELEMENT[info->Element_patch[element_loc]]; k++)
-						for (int l = 0; l < info->DIMENSION; l++)
-						{
-							double d_loc = info->Displacement[info->Controlpoint_of_Element[element_loc * MAX_NO_CP_ON_ELEMENT + k] * info->DIMENSION + l];
-							info->Displacement_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] += R_loc[k] * d_loc;
-							u_loc[k * info->DIMENSION + l] = d_loc;
-						}
-
-					// strain
-					for (int k = 0; k < D_MATRIX_SIZE; k++)
-						for (int l = 0; l < info->No_Control_point_ON_ELEMENT[info->Element_patch[element_loc]]; l++)
-							for (int m = 0; m < info->DIMENSION; m++)
-								info->Strain_at_ele_vertex[(element * vertex_n + point) * N_STRESS + k] += bl_loc[k * MAX_KIEL_SIZE + l * info->DIMENSION + m] * u_loc[l * info->DIMENSION + m];
-				}
-			}
-
-			// overlay local
-			if (i >= info->Total_Element_on_mesh[0] && Total_mesh > 1)
-			{
-				geo_parameter_coord(geo_element, geo_coord_tilde, temp_para_glo, info);
-				int element_glo = ele_check(info->Global_local_patch, temp_para_glo, info);
-				tilde_coord(temp_point_glo, temp_para_glo, info->Global_local_patch, element_glo, info);
-
-				// overlay displacement
-				vector<double> R_glo(MAX_NO_CP_ON_ELEMENT);
-				vector<double> bl_glo(D_MATRIX_SIZE * MAX_KIEL_SIZE);
-				vector<double> u_glo(MAX_KIEL_SIZE * info->DIMENSION, 0.0);
-				shape_and_dshape(R_glo.data(), temp_point_glo, element_glo, info);
-				Make_B_Linear(element_glo, temp_point_glo, bl_glo.data(), info);
-				for (int k = 0; k < info->No_Control_point_ON_ELEMENT[info->Element_patch[element_glo]]; k++)
-					for (int l = 0; l < info->DIMENSION; l++)
-					{
-						double d_glo = info->Displacement[info->Controlpoint_of_Element[element_glo * MAX_NO_CP_ON_ELEMENT + k] * info->DIMENSION + l];
-						info->Displacement_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] += R_glo[k] * d_glo;
-						u_glo[k * info->DIMENSION + l] = d_glo;
-					}
-				
-				// strain
-				for (int k = 0; k < D_MATRIX_SIZE; k++)
-					for (int l = 0; l < info->No_Control_point_ON_ELEMENT[info->Element_patch[element_glo]]; l++)
-						for (int m = 0; m < info->DIMENSION; m++)
-							info->Strain_at_ele_vertex[(element * vertex_n + point) * N_STRESS + k] += bl_glo[k * MAX_KIEL_SIZE + l * info->DIMENSION + m] * u_glo[l * info->DIMENSION + m];
-			}
-
-			// stress
-			for (int k = 0; k < D_MATRIX_SIZE; k++)
-				for (int l = 0; l < D_MATRIX_SIZE; l++)
-					info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + k] += info->D[k * D_MATRIX_SIZE + l] * info->Strain_at_ele_vertex[(element * vertex_n + point) * N_STRESS + l];
-
-			// 2D specific adjustments
-			if (info->DIMENSION == 2)
-			{
-				// plane stress condition
-				if (info->c.ANALYSIS_MODE == 0)
-				{
-					info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + 3] = -1.0 * nu / E * (info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + 0] + info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + 1]);
-					info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + 3] = 0.0;
-				}
-
-				// plane strain condition
-				else if (info->c.ANALYSIS_MODE == 1)
-				{
-					info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + 3] = 0.0;
-					info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + 3] = nu * (info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + 0] + info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + 1]);
-				}
-			}
+					Parameter_coord_at_ele_vertex[l] += R_geo[k] * info->Geo_Node_Coordinate[info->Geo_Controlpoint_of_Element[element * MAX_NO_CP_ON_ELEMENT + k] * (info->DIMENSION + 1) + l];
+			int ele_glo = ele_check(info->Global_local_patch, Parameter_coord_at_ele_vertex, info);
+			tilde_coord(glo_coord_tilde, Parameter_coord_at_ele_vertex, info->Global_local_patch, ele_glo, info);
+			physical_coord(ele_glo, glo_coord_tilde, out_coord, info);
+			for (int l = 0; l < info->DIMENSION; l++)
+				info->PhysicalCoordinate_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] = out_coord[l];
 
 			// output file
-			// displacement
-			fprintf(fp_disp, "%d\t%d", element, point);
-			for (int k = 0; k < info->DIMENSION; k++)
-			fprintf(fp_disp, "\t%.15e", info->Displacement_at_ele_vertex[(element * vertex_n + point) * info->DIMENSION + k]);
-			fprintf(fp_disp, "\n");
-			// printf("wrote displacement\n");
-			
-			// strain
-			fprintf(fp_strain, "%d\t%d", element, point);
-			for (int k = 0; k < N_STRAIN; k++)
-			fprintf(fp_strain, "\t%.15e", info->Strain_at_ele_vertex[(element * vertex_n + point) * N_STRAIN + k]);
-			fprintf(fp_strain, "\n");
-			// printf("wrote strain\n");
-			
-			// stress
-			fprintf	(fp_stress, "%d\t%d", element, point);
-			for (int k = 0; k < N_STRESS; k++)
-			fprintf(fp_stress, "\t%.15e", info->Stress_at_ele_vertex[(element * vertex_n + point) * N_STRESS + k]);
-			fprintf(fp_stress, "\n");
-			// printf("wrote stress\n");
-
-			// physical coordinate
 			fprintf(fp_pc, "%d\t%d", element, point);
 			for (int k = 0; k < info->DIMENSION; k++)
 			fprintf(fp_pc, "\t%.15e", info->PhysicalCoordinate_at_ele_vertex[(element * vertex_n + point) * info->DIMENSION + k]);
 			fprintf(fp_pc, "\n");
-			// printf("wrote physical coordinate\n");
+
+			// debug
+			// printf("element: %d, point: %d, physical coordinate: ", element, point);
+			// for (int k = 0; k < info->DIMENSION; k++)
+			// 	printf("%.15e ", info->PhysicalCoordinate_at_ele_vertex[(element * vertex_n + point) * info->DIMENSION + k]);
+			// printf("\n");
 		}
 	}
-
-	if (fp_disp) 
-	    fclose(fp_disp);
-
-	if (fp_strain)
-	    fclose(fp_strain);
-
-	if (fp_stress)
-	    fclose(fp_stress);
 
 	if (fp_pc)
 	    fclose(fp_pc);
 }
 
 
-void Calc_on_Gauss_Point(information *info)
-{	
-	const int n_gp = pow_int(info->c.NUM_GAUSS_POINTS, info->DIMENSION);
-	const int n_gp_ex = pow_int(info->c.NUM_GAUSS_POINTS_EXTENDED, info->DIMENSION);
-	const int gp_stride = (n_gp_ex > n_gp) ? n_gp_ex : n_gp;
-
-	FILE *fp_disp, *fp_strain, *fp_stress, *fp_rf, *fp_pc;
-	fp_disp   = fopen("_Displacement_overlay_at_GP.dat", "w");
-	fp_strain = fopen("_Strain_overlay_at_GP.dat", "w");
-	fp_stress = fopen("_Stress_overlay_at_GP.dat", "w");
-	fp_rf     = fopen("_ReactionForce.dat", "w");
-	fp_pc     = fopen("_PhysicalCoordinate_at_GP.dat", "w");
-	if (info->DIMENSION == 2)
+// 移動した制御点の座標を新しいInputとして出力する関数
+void Output_new_input_file(information *info)
+{
+	char raw_name[256] = "second_inverse_new_control_points.txt";
+	FILE *fp_cp = fopen(raw_name, "w");
+	if (fp_cp == NULL)
 	{
-		fprintf(fp_disp,   "要素番号\tガウス点番号\tdisp_x\tdisp_y\n");
-		fprintf(fp_strain, "要素番号\tガウス点番号\txx\tyy\txy\tzz\n");
-		fprintf(fp_stress, "要素番号\tガウス点番号\txx\tyy\txy\tzz\n");
-		fprintf(fp_rf,     "コントロールポイント番号\trf_x\trf_y\n");
-		fprintf(fp_pc,     "要素番号\tガウス点番号\tx\ty\n");
-	}
-	else if (info->DIMENSION == 3)
-	{
-		fprintf(fp_disp,   "要素番号\tガウス点番号\tdisp_x\tdisp_y\tdisp_z\n");
-		fprintf(fp_strain, "要素番号\tガウス点番号\txx\tyy\tzz\txy\tyz\txz\n");
-		fprintf(fp_stress, "要素番号\tガウス点番号\txx\tyy\tzz\txy\tyz\txz\n");
-		fprintf(fp_rf,     "コントロールポイント番号\trf_x\trf_y\trf_z\n");
-		fprintf(fp_pc,     "要素番号\tガウス点番号\tx\ty\tz\n");
+		printf("Cannot open output file: %s\n", raw_name);
+		exit(1);
 	}
 
-	for (int i = 0; i < info->Total_Element_to_mesh[Total_mesh]; i++)
+	int node_num = info->Geo_Total_Control_Point_on_mesh;
+	fprintf(fp_cp, "# control point data for second inverse mapping\n");
+	fprintf(fp_cp, "# format: id x y [z] w\n");
+	for (int i = 0; i < node_num; i++)
 	{
-		for (int j = 0; j < info->gp[i].n(); j++)
-		{
-			double temp_point[MAX_DIMENSION] = {0.0};
-			double temp_point_glo[MAX_DIMENSION] = {0.0};
-			double temp_para_glo[MAX_DIMENSION] = {0.0};
-			double temp_point_loc[MAX_DIMENSION] = {0.0};
-			double temp_para_loc[MAX_DIMENSION] = {0.0};
-
-			int element = i;
-			int point = j;
-			int gp_base = element * gp_stride + point;
-
-			// for SSIGA local
-			double geo_coord_tilde[MAX_DIMENSION] = {0.0};	//ローカルジオメトリ表現の要素パラメータ座標
-			int geo_element = 0;							//ローカルジオメトリ表現の要素番号
-
-			// make temp_point
-			for (int k = 0; k < info->DIMENSION; k++)
-				temp_point[k] = info->gp[element].para()[point * info->DIMENSION + k];
-			
-			if (i < info->Total_Element_on_mesh[0]) // IGA or SSIGA global
-			{
-				vector<double> R(MAX_NO_CP_ON_ELEMENT);
-				vector<double> bl(D_MATRIX_SIZE * MAX_KIEL_SIZE);
-				vector<double> u(MAX_NO_CP_ON_ELEMENT * info->DIMENSION, 0.0);
-				shape_and_dshape(R.data(), temp_point, element, info);
-				Make_B_Linear(element, temp_point, bl.data(), info);
-				for (int k = 0; k < info->No_Control_point_ON_ELEMENT[info->Element_patch[element]]; k++)
-					for (int l = 0; l < info->DIMENSION; l++)
-					{
-						double d = info->Displacement[info->Controlpoint_of_Element[element * MAX_NO_CP_ON_ELEMENT + k] * info->DIMENSION + l];
-						info->PhysicalCoordinate_at_GP[gp_base * info->DIMENSION + l] += R[k] * info->Node_Coordinate[info->Controlpoint_of_Element[element * MAX_NO_CP_ON_ELEMENT + k] * (info->DIMENSION + 1) + l];
-						info->Displacement_at_GP[gp_base * info->DIMENSION + l] += R[k] * d;
-						u[k * info->DIMENSION + l] = d;
-					}
-				// strain
-				for (int k= 0; k < D_MATRIX_SIZE; k++)
-					for (int l = 0; l < info->No_Control_point_ON_ELEMENT[info->Element_patch[element]]; l++)
-						for (int m = 0; m < info->DIMENSION; m++)
-							info->Strain_at_GP[gp_base * N_STRESS + k] += bl[k * MAX_KIEL_SIZE + l * info->DIMENSION + m] * u[l * info->DIMENSION + m];
-			}
-			if (i >= info->Total_Element_on_mesh[0] && Total_mesh > 1)
-			{
-				int patch_num = info->Element_patch[element];							//要素番号からパッチ番号を取得
-				int geo_patch_num = patch_num - info->Total_Patch_on_mesh[0];			//ジオメトリ表現のパッチ番号は、ローカルのパッチ番号と常に等しい
-				double coord[MAX_DIMENSION] = {0.0};
-				double out_coord[MAX_DIMENSION] = {0.0};									//ローカルのパッチパラメータ座標
-				double coord_tilde[MAX_DIMENSION] = {0.0};								//ローカルの要素パラメータ座標
-				double glo_coord_tilde[MAX_DIMENSION] = {0.0};							//グローバルの要素パラメータ座標
-				double Parameter_coord_at_GP[MAX_DIMENSION] = {0.0};			//要素のパラメータ座標	
-			
-				std::copy(temp_point, temp_point + info->DIMENSION, coord_tilde);				//要素のパラメータ座標をガウス点座標に変換
-				trans_ele_patch_coord(coord, coord_tilde, patch_num, element, info);			//要素のパラメータ座標をパッチのパラメータ座標に変換
-				geo_element = geo_ele_check(geo_patch_num, coord, info);						//パラメータ座標から、要素を探索
-				geo_tilde_coord(geo_coord_tilde, coord, geo_patch_num, geo_element, info);		//パッチパラメータ座標を、ジオメトリ要素パラメータ座標に変換
-			
-				vector<double> R_geo(MAX_NO_CP_ON_ELEMENT);
-				vector<double> R_disp(MAX_NO_CP_ON_ELEMENT);
-				vector<double> bl(D_MATRIX_SIZE * MAX_KIEL_SIZE);
-				vector<double> u(MAX_KIEL_SIZE * info->DIMENSION, 0.0);
-				geo_shape_and_dshape(R_geo.data(), geo_coord_tilde, geo_element, info);
-				Bspline_shape_and_dshape(R_disp.data(), temp_point, element, info);
-				Make_B_Linear(element, temp_point, bl.data(), info);
-			
-				// physical coordinate
-				for (int k = 0; k < info->Geo_No_Control_point_ON_ELEMENT[info->Geo_Element_patch[geo_element]]; k++)
-					for (int l = 0; l < info->DIMENSION; l++)
-						Parameter_coord_at_GP[l] += R_geo[k] * info->Geo_Node_Coordinate[info->Geo_Controlpoint_of_Element[geo_element * MAX_NO_CP_ON_ELEMENT + k] * (info->DIMENSION + 1) + l];
-				int ele_glo = ele_check(info->Global_local_patch, Parameter_coord_at_GP, info);
-				tilde_coord(glo_coord_tilde, Parameter_coord_at_GP, info->Global_local_patch, ele_glo, info);
-				physical_coord(ele_glo, glo_coord_tilde, out_coord, info);
-				for (int l = 0; l < info->DIMENSION; l++)
-					info->PhysicalCoordinate_at_GP[gp_base * info->DIMENSION + l] = out_coord[l];
-			
-				// displacement
-				for (int k = 0; k < info->No_Control_point_ON_ELEMENT[info->Element_patch[element]]; k++)
-					for (int l = 0; l < info->DIMENSION; l++)
-					{
-						double d = info->Displacement[info->Controlpoint_of_Element[element * MAX_NO_CP_ON_ELEMENT + k] * info->DIMENSION + l];
-						info->Displacement_at_GP[gp_base * info->DIMENSION + l] += R_disp[k] * d;
-						u[k * info->DIMENSION + l] = d;
-					}
-				
-				// strain
-				for (int k = 0; k < D_MATRIX_SIZE; k++)
-					for (int l = 0; l < info->No_Control_point_ON_ELEMENT[info->Element_patch[element]]; l++)
-						for (int m = 0; m < info->DIMENSION; m++)
-							info->Strain_at_GP[gp_base * N_STRESS + k] += bl[k * MAX_KIEL_SIZE + l * info->DIMENSION + m] * u[l * info->DIMENSION + m];
-			}
-			// overlay global
-			int status_glo_overlay = 0;
-			if (i < info->Total_Element_on_mesh[0] && Total_mesh > 1 && info->Element_patch[element] == info->Global_local_patch)
-			{
-				double temp_point_patch[MAX_DIMENSION] = {0.0};
-				trans_ele_patch_coord(temp_point_patch, temp_point, info->Element_patch[element], element, info);
-
-				// make temp_point_glo
-				int itr_n = 0, loc_patch = 0;
-				for (int k = info->Total_Patch_to_mesh[1]; k < info->Total_Patch_to_mesh[Total_mesh]; k++)
-				{
-					itr_n = calc_local_patch_parameter_coord(temp_point_patch, k, temp_para_loc, info);
-					loc_patch = k;
-					if (itr_n != ERROR)
-					{
-						status_glo_overlay = 1;
-						break;
-					}
-				}
-
-				int element_loc = 0;
-				if (status_glo_overlay)
-				{
-					element_loc = ele_check(loc_patch, temp_para_loc, info);
-					tilde_coord(temp_point_loc, temp_para_loc, loc_patch, element_loc, info);
-				}
-
-				// overlay displacement
-				if (status_glo_overlay)
-				{
-					vector<double> R_loc(MAX_NO_CP_ON_ELEMENT);
-					vector<double> bl_loc(D_MATRIX_SIZE * MAX_KIEL_SIZE);
-					vector<double> u_loc(MAX_KIEL_SIZE * info->DIMENSION, 0.0);
-					Bspline_shape_and_dshape(R_loc.data(), temp_point_loc, element_loc, info);
-					Make_B_Linear(element_loc, temp_point_loc, bl_loc.data(), info);
-					for (int k = 0; k < info->No_Control_point_ON_ELEMENT[info->Element_patch[element_loc]]; k++)
-						for (int l = 0; l < info->DIMENSION; l++)
-						{
-							double d_loc = info->Displacement[info->Controlpoint_of_Element[element_loc * MAX_NO_CP_ON_ELEMENT + k] * info->DIMENSION + l];
-							info->Displacement_at_GP[gp_base * info->DIMENSION + l] += R_loc[k] * d_loc;
-							u_loc[k * info->DIMENSION + l] = d_loc;
-						}
-
-					// strain
-					for (int k = 0; k < D_MATRIX_SIZE; k++)
-						for (int l = 0; l < info->No_Control_point_ON_ELEMENT[info->Element_patch[element_loc]]; l++)
-							for (int m = 0; m < info->DIMENSION; m++)
-								info->Strain_at_GP[gp_base * N_STRESS + k] += bl_loc[k * MAX_KIEL_SIZE + l * info->DIMENSION + m] * u_loc[l * info->DIMENSION + m];
-				}
-			}
-
-			// overlay local
-			if (i >= info->Total_Element_on_mesh[0] && Total_mesh > 1)
-			{
-				geo_parameter_coord(geo_element, geo_coord_tilde, temp_para_glo, info);
-				int element_glo = ele_check(info->Global_local_patch, temp_para_glo, info);
-				tilde_coord(temp_point_glo, temp_para_glo, info->Global_local_patch, element_glo, info);
-
-				// overlay displacement
-				vector<double> R_glo(MAX_NO_CP_ON_ELEMENT);
-				vector<double> bl_glo(D_MATRIX_SIZE * MAX_KIEL_SIZE);
-				vector<double> u_glo(MAX_KIEL_SIZE * info->DIMENSION, 0.0);
-				shape_and_dshape(R_glo.data(), temp_point_glo, element_glo, info);
-				Make_B_Linear(element_glo, temp_point_glo, bl_glo.data(), info);
-				for (int k = 0; k < info->No_Control_point_ON_ELEMENT[info->Element_patch[element_glo]]; k++)
-					for (int l = 0; l < info->DIMENSION; l++)
-					{
-						double d_glo = info->Displacement[info->Controlpoint_of_Element[element_glo * MAX_NO_CP_ON_ELEMENT + k] * info->DIMENSION + l];
-						info->Displacement_at_GP[gp_base * info->DIMENSION + l] += R_glo[k] * d_glo;
-						u_glo[k * info->DIMENSION + l] = d_glo;
-					}
-				
-				// strain
-				for (int k = 0; k < D_MATRIX_SIZE; k++)
-					for (int l = 0; l < info->No_Control_point_ON_ELEMENT[info->Element_patch[element_glo]]; l++)
-						for (int m = 0; m < info->DIMENSION; m++)
-							info->Strain_at_GP[gp_base * N_STRESS + k] += bl_glo[k * MAX_KIEL_SIZE + l * info->DIMENSION + m] * u_glo[l * info->DIMENSION + m];
-			}
-
-			// stress
-			for (int k = 0; k < D_MATRIX_SIZE; k++)
-				for (int l = 0; l < D_MATRIX_SIZE; l++)
-					info->Stress_at_GP[gp_base * N_STRESS + k] += info->D[k * D_MATRIX_SIZE + l] * info->Strain_at_GP[gp_base * N_STRESS + l];
-
-			// 2D specific adjustments
-			if (info->DIMENSION == 2)
-			{
-				// plane stress condition
-				if (info->c.ANALYSIS_MODE == 0)
-				{
-					info->Stress_at_GP[gp_base * N_STRESS + 3] = -1.0 * nu / E * (info->Stress_at_GP[gp_base * N_STRESS + 0] + info->Stress_at_GP[gp_base * N_STRESS + 1]);
-					info->Stress_at_GP[gp_base * N_STRESS + 3] = 0.0;
-				}
-
-				// plane strain condition
-				else if (info->c.ANALYSIS_MODE == 1)
-				{
-					info->Stress_at_GP[gp_base * N_STRESS + 3] = 0.0;
-					info->Stress_at_GP[gp_base * N_STRESS + 3] = nu * (info->Stress_at_GP[gp_base * N_STRESS + 0] + info->Stress_at_GP[gp_base * N_STRESS + 1]);
-				}
-			}
-
-			// output file
-			// displacement
-			fprintf(fp_disp, "%d\t%d", element, point);
-			for (int k = 0; k < info->DIMENSION; k++)
-			fprintf(fp_disp, "\t%.15e", info->Displacement_at_GP[gp_base * info->DIMENSION + k]);
-			fprintf(fp_disp, "\n");
-			// printf("wrote displacement\n");
-			
-			// strain
-			fprintf(fp_strain, "%d\t%d", element, point);
-			for (int k = 0; k < N_STRAIN; k++)
-			fprintf(fp_strain, "\t%.15e", info->Strain_at_GP[gp_base * N_STRAIN + k]);
-			fprintf(fp_strain, "\n");
-			// printf("wrote strain\n");
-			
-			// stress
-			fprintf	(fp_stress, "%d\t%d", element, point);
-			for (int k = 0; k < N_STRESS; k++)
-				fprintf(fp_stress, "\t%.15e", info->Stress_at_GP[gp_base * N_STRESS + k]);
-			fprintf(fp_stress, "\n");
-			// printf("wrote stress\n");
-
-			// physical coordinate
-			fprintf(fp_pc, "%d\t%d", element, point);
-			for (int k = 0; k < info->DIMENSION; k++)
-				fprintf(fp_pc, "\t%.15e", info->PhysicalCoordinate_at_GP[gp_base * info->DIMENSION + k]);
-			fprintf(fp_pc, "\n");
-			// printf("wrote physical coordinate\n");
-		}
+		fprintf(fp_cp, "%d", i);
+		for (int j = 0; j < info->DIMENSION + 1; j++)
+			fprintf(fp_cp, " %.20e", info->New_Node_Coordinate[i * (info->DIMENSION + 1) + j]);
+		fprintf(fp_cp, "\n");
 	}
-
-	if (fp_disp) 
-	    fclose(fp_disp);
-
-	if (fp_strain)
-	    fclose(fp_strain);
-
-	if (fp_stress)
-	    fclose(fp_stress);
-
-	if (fp_pc)
-	    fclose(fp_pc);
+	fclose(fp_cp);
 }
 
 
