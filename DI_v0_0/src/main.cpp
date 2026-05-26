@@ -117,12 +117,6 @@ int main(int argc, char **argv)
 		Make_Gauss_points(false, &info);
 	}
 
-	if (info.c.FRACTURE_MODE == 0 && info.c.CALCLATE_DISPLACEMENT == 0)
-	{
-		printf("error: No valid analysis mode selected.\n");
-		exit(0);
-	}
-
 	// memory allocation
 	Allocation(alloc_count++, &info);
 
@@ -132,6 +126,12 @@ int main(int argc, char **argv)
 		Allocation(9, &info);
 		printf("start calc on element vertex\n\n");
 		Calc_on_Element_Vertex(&info);
+
+		if (argv[argc - 2] == nullptr)
+		{
+			printf("vertex data is missing: only vertex output mode\n\n");
+			exit(0);
+		}
 	}
 
 	// check geometry only output

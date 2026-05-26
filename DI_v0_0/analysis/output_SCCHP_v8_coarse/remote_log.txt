@@ -1,0 +1,214 @@
+﻿Perf mode: stat
+cd ./src && make -f Make_src
+make[1]: ディレクトリ `/home/oishi/DI_v0_0/src' に入ります
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -DMKL_ILP64 -fdiagnostics-color=always -fno-alias -ansi-alias -qopt-prefetch=5 -qopt-mem-layout-trans=3 -falign-functions=64 -funroll-loops -xCORE-AVX512 -mtune=native -qopt-zmm-usage=high -I/usr/include/hdf5/serial -Wall -Wextra -Wno-unused-parameter -MMD -MP -c sub_pre.cpp -o sub_pre.o
+icpx -O3 -std=c++20 -qopenmp -qopenmp-simd -ipo -fp-model=precise -DMKL_ILP64 -fdiagnostics-color=always -flto=auto -flto-jobs=48 -o DI.x main.o sub_pre.o sub_solver.o sub_tool.o sub_post.o sub_MI3D.o sub_search.o class.o -Wl,--start-group -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -Wl,--end-group -lpthread -lm -ldl -liomp5 -lhdf5_cpp -lhdf5 -L/usr/lib/x86_64-linux-gnu/hdf5/serial
+Build complete.
+make[1]: ディレクトリ `/home/oishi/DI_v0_0/src' から出ます
+Cleaning output_SCCHP_v8_coarse while preserving __Displacement.dat
+cd ./analysis && mkdir -p output_SCCHP_v8_coarse
+cd ./analysis/output_SCCHP_v8_coarse && mkdir -p bin
+cd ./analysis/material && ./cp.sh ./option_DI.ini
+Copy destination: ../output_SCCHP_v8_coarse
+cd ./analysis/output_SCCHP_v8_coarse && . ../setenv.sh && perf stat -dd numactl --localalloc stdbuf -oL ../../src/DI.x ../input/SCCHP_v8_coarse/input_glo.txt ../input/SCCHP_v8_coarse/input_loc.txt ../input/SCCHP_v8_coarse/input_vertex.txt ./option_DI.ini | tee log.txt
+
+	Environment variables set by setenv.sh:
+		LD_PRELOAD	= /usr/lib64/libjemalloc.so.1
+		OMP_NUM_THREADS	= 40
+		OMP_PROC_BIND	= close
+		OMP_PLACES	= cores
+		KMP_AFFINITY	= 
+		KMP_BLOCKTIME	= 0
+
+----- Double Inverse Engagement Program -----
+
+2 input files detected.
+
+start Get Option Data
+
+GEOMETRY_ONLY_OUTPUT: 0
+OUTPUT_GLOBAL_PARAMETERS: 0
+CALC_ON_ELE_VERTEX: 1
+USE_EXTENDED_QUADRATURE: 1
+NUM_GAUSS_POINTS: 4
+NUM_GAUSS_POINTS_EXTENDED: 10
+SS-IGA model data carried out.(2 input files)
+
+start Get Input Data
+
+before first Allocation
+before Get_Input_1 mesh=0
+
+----- Reading Input File 1 -----
+DIMENSION: 3
+E: 2.060000e+05, nu: 3.000000e-01
+No_Patch: 3
+Total_Patch_to_mesh[0] = 0
+Total_Control_Point: 2025
+Total_Control_Point_to_mesh[0] = 0
+Total_Constraint = 165
+Total_Load = 0
+Total_DistributedForce = 2
+after Get_Input_1 mesh=0
+before Get_Input_1 mesh=1
+
+----- Reading Input File 2 -----
+DIMENSION: 3
+E: 2.100000e+05, nu: 3.000000e-01
+No_Patch: 1
+Total_Patch_to_mesh[1] = 3
+Total_Control_Point: 27
+Total_Control_Point_to_mesh[1] = 2025
+Total_Constraint = 1
+Total_Load = 0
+Total_DistributedForce = 0
+Global patch number, the local patch belongs to = 1
+Geometry patch on mesh = 1
+Geometry Control point on mesh = 27
+
+after Get_Input_1 mesh=1
+Order[0] = 3
+Order[1] = 3
+Order[2] = 3
+Order[3] = 3
+Order[4] = 3
+Order[5] = 3
+Order[6] = 3
+Order[7] = 3
+Order[8] = 3
+No_knot[0] = 13
+No_knot[1] = 13
+No_knot[2] = 13
+No_knot[3] = 13
+No_knot[4] = 13
+No_knot[5] = 13
+No_knot[6] = 13
+No_knot[7] = 13
+No_knot[8] = 13
+No_Control_point[0] = 9
+No_Control_point[1] = 9
+No_Control_point[2] = 9
+No_Control_point[3] = 9
+No_Control_point[4] = 9
+No_Control_point[5] = 9
+No_Control_point[6] = 9
+No_Control_point[7] = 9
+No_Control_point[8] = 9
+No_Control_point_in_patch[0] = 729	No_Control_point_in_patch[1] = 729	No_Control_point_in_patch[2] = 729	
+Total_Element = 648
+Total_Element_on_mesh[0] = 648
+No_Control_point_ON_ELEMENT[0] = 64
+No_Control_point_ON_ELEMENT[1] = 64
+No_Control_point_ON_ELEMENT[2] = 64
+Distibuted load number: 0
+type_load: 2 iPatch: 0 iCoord: 1 jCoord: 2 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 1
+type_load: 2 iPatch: 2 iCoord: 1 jCoord: 2 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Order[9] = 2
+Order[10] = 2
+Order[11] = 2
+No_knot[9] = 6
+No_knot[10] = 6
+No_knot[11] = 6
+No_Control_point[9] = 3
+No_Control_point[10] = 3
+No_Control_point[11] = 3
+No_Control_point_in_patch[3] = 27	
+Total_Element = 1
+Total_Element_on_mesh[1] = 1
+No_Control_point_ON_ELEMENT[3] = 27
+Geo_Order[0] = 2
+Geo_Order[1] = 2
+Geo_Order[2] = 2
+Geo_No_knot[0] = 6
+Geo_No_knot[1] = 6
+Geo_No_knot[2] = 6
+Geo_No_Control_point[0] = 3
+Geo_No_Control_point[1] = 3
+Geo_No_Control_point[2] = 3
+Geo_No_Control_point_in_patch[0] = 27	
+Geo_Total_Element = 1
+Geo_Total_Element_on_mesh = 1
+Geo_No_Control_point_ON_ELEMENT[0] = 27
+
+start reading vertex data
+warning: Could not open file ../input/SCCHP_v8_coarse/input_vertex.txt
+
+start Make INC
+start Preprocessing
+start calc on element vertex
+
+start Make_connectivity
+
+start output_for_paraview_timestep
+
+start first inverse mapping
+
+WARNING: line search failed for element 0, vertex 0 at iteration 1
+WARNING: line search failed for element 0, vertex 1 at iteration 1
+WARNING: line search failed for element 0, vertex 2 at iteration 1
+WARNING: line search failed for element 0, vertex 3 at iteration 1
+WARNING: line search failed for element 0, vertex 4 at iteration 1
+WARNING: line search failed for element 0, vertex 5 at iteration 1
+WARNING: line search failed for element 0, vertex 6 at iteration 1
+WARNING: line search failed for element 0, vertex 7 at iteration 1
+WARNING: line search failed for element 0, vertex 8 at iteration 1
+WARNING: line search failed for element 0, vertex 9 at iteration 1
+WARNING: line search failed for element 0, vertex 10 at iteration 1
+WARNING: line search failed for element 0, vertex 11 at iteration 1
+WARNING: line search failed for element 0, vertex 12 at iteration 1
+WARNING: line search failed for element 0, vertex 13 at iteration 1
+WARNING: line search failed for element 0, vertex 14 at iteration 1
+WARNING: line search failed for element 0, vertex 15 at iteration 1
+WARNING: line search failed for element 0, vertex 16 at iteration 1
+WARNING: line search failed for element 0, vertex 17 at iteration 1
+WARNING: line search failed for element 0, vertex 18 at iteration 1
+WARNING: line search failed for element 0, vertex 19 at iteration 1
+WARNING: line search failed for element 0, vertex 20 at iteration 1
+WARNING: line search failed for element 0, vertex 21 at iteration 1
+WARNING: line search failed for element 0, vertex 22 at iteration 1
+WARNING: line search failed for element 0, vertex 23 at iteration 1
+WARNING: line search failed for element 0, vertex 24 at iteration 1
+WARNING: line search failed for element 0, vertex 25 at iteration 1
+WARNING: line search failed for element 0, vertex 26 at iteration 1
+start second inverse mapping
+
+GaussianElimination is performed.
+Finish GaussianElimination
+GaussianElimination is performed.
+Finish GaussianElimination
+GaussianElimination is performed.
+Finish GaussianElimination
+start output new input file
+
+	Postprocess time:	0.812[s]
+
+	All analysis time:	0.812[s]
+
+ Performance counter stats for 'numactl --localalloc stdbuf -oL ../../src/DI.x ../input/SCCHP_v8_coarse/input_glo.txt ../input/SCCHP_v8_coarse/input_loc.txt ../input/SCCHP_v8_coarse/input_vertex.txt ./option_DI.ini':
+
+       1781.230226      task-clock:u (msec)       #    1.962 CPUs utilized          
+                 0      context-switches:u        #    0.000 K/sec                  
+                 0      cpu-migrations:u          #    0.000 K/sec                  
+             6,210      page-faults:u             #    0.003 M/sec                  
+     2,399,705,688      cycles:u                  #    1.347 GHz                      (61.26%)
+     2,685,913,029      instructions:u            #    1.12  insn per cycle           (69.01%)
+       239,325,478      branches:u                #  134.360 M/sec                    (69.08%)
+         2,772,754      branch-misses:u           #    1.16% of all branches          (68.84%)
+       765,125,336      L1-dcache-loads:u         #  429.549 M/sec                    (68.65%)
+         9,060,881      L1-dcache-load-misses:u   #    1.18% of all L1-dcache hits    (68.71%)
+           367,399      LLC-loads:u               #    0.206 M/sec                    (69.03%)
+           100,910      LLC-load-misses:u         #   27.47% of all LL-cache hits     (69.45%)
+   <not supported>      L1-icache-loads:u                                           
+         2,333,980      L1-icache-load-misses:u                                       (69.83%)
+       772,121,470      dTLB-loads:u              #  433.477 M/sec                    (70.03%)
+            46,618      dTLB-load-misses:u        #    0.01% of all dTLB cache hits   (61.89%)
+            26,188      iTLB-loads:u              #    0.015 M/sec                    (61.70%)
+           155,504      iTLB-load-misses:u        #  593.80% of all iTLB cache hits   (61.52%)
+
+       0.907961433 seconds time elapsed
+

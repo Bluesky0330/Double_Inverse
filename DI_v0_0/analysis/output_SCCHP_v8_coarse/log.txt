@@ -1,0 +1,168 @@
+----- Double Inverse Engagement Program -----
+
+2 input files detected.
+
+start Get Option Data
+
+GEOMETRY_ONLY_OUTPUT: 0
+OUTPUT_GLOBAL_PARAMETERS: 0
+CALC_ON_ELE_VERTEX: 1
+USE_EXTENDED_QUADRATURE: 1
+NUM_GAUSS_POINTS: 4
+NUM_GAUSS_POINTS_EXTENDED: 10
+SS-IGA model data carried out.(2 input files)
+
+start Get Input Data
+
+before first Allocation
+before Get_Input_1 mesh=0
+
+----- Reading Input File 1 -----
+DIMENSION: 3
+E: 2.060000e+05, nu: 3.000000e-01
+No_Patch: 3
+Total_Patch_to_mesh[0] = 0
+Total_Control_Point: 2025
+Total_Control_Point_to_mesh[0] = 0
+Total_Constraint = 165
+Total_Load = 0
+Total_DistributedForce = 2
+after Get_Input_1 mesh=0
+before Get_Input_1 mesh=1
+
+----- Reading Input File 2 -----
+DIMENSION: 3
+E: 2.100000e+05, nu: 3.000000e-01
+No_Patch: 1
+Total_Patch_to_mesh[1] = 3
+Total_Control_Point: 27
+Total_Control_Point_to_mesh[1] = 2025
+Total_Constraint = 1
+Total_Load = 0
+Total_DistributedForce = 0
+Global patch number, the local patch belongs to = 1
+Geometry patch on mesh = 1
+Geometry Control point on mesh = 27
+
+after Get_Input_1 mesh=1
+Order[0] = 3
+Order[1] = 3
+Order[2] = 3
+Order[3] = 3
+Order[4] = 3
+Order[5] = 3
+Order[6] = 3
+Order[7] = 3
+Order[8] = 3
+No_knot[0] = 13
+No_knot[1] = 13
+No_knot[2] = 13
+No_knot[3] = 13
+No_knot[4] = 13
+No_knot[5] = 13
+No_knot[6] = 13
+No_knot[7] = 13
+No_knot[8] = 13
+No_Control_point[0] = 9
+No_Control_point[1] = 9
+No_Control_point[2] = 9
+No_Control_point[3] = 9
+No_Control_point[4] = 9
+No_Control_point[5] = 9
+No_Control_point[6] = 9
+No_Control_point[7] = 9
+No_Control_point[8] = 9
+No_Control_point_in_patch[0] = 729	No_Control_point_in_patch[1] = 729	No_Control_point_in_patch[2] = 729	
+Total_Element = 648
+Total_Element_on_mesh[0] = 648
+No_Control_point_ON_ELEMENT[0] = 64
+No_Control_point_ON_ELEMENT[1] = 64
+No_Control_point_ON_ELEMENT[2] = 64
+Distibuted load number: 0
+type_load: 2 iPatch: 0 iCoord: 1 jCoord: 2 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: -1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Distibuted load number: 1
+type_load: 2 iPatch: 2 iCoord: 1 jCoord: 2 val_Coord: 1.000000e+00
+Range_Coord: 0.000000e+00 1.000000e+00 0.000000e+00 1.000000e+00
+Coef_Dist_Load: 1.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00 0.000000e+00
+Order[9] = 2
+Order[10] = 2
+Order[11] = 2
+No_knot[9] = 6
+No_knot[10] = 6
+No_knot[11] = 6
+No_Control_point[9] = 3
+No_Control_point[10] = 3
+No_Control_point[11] = 3
+No_Control_point_in_patch[3] = 27	
+Total_Element = 1
+Total_Element_on_mesh[1] = 1
+No_Control_point_ON_ELEMENT[3] = 27
+Geo_Order[0] = 2
+Geo_Order[1] = 2
+Geo_Order[2] = 2
+Geo_No_knot[0] = 6
+Geo_No_knot[1] = 6
+Geo_No_knot[2] = 6
+Geo_No_Control_point[0] = 3
+Geo_No_Control_point[1] = 3
+Geo_No_Control_point[2] = 3
+Geo_No_Control_point_in_patch[0] = 27	
+Geo_Total_Element = 1
+Geo_Total_Element_on_mesh = 1
+Geo_No_Control_point_ON_ELEMENT[0] = 27
+
+start reading vertex data
+warning: Could not open file ../input/SCCHP_v8_coarse/input_vertex.txt
+
+start Make INC
+start Preprocessing
+start calc on element vertex
+
+start Make_connectivity
+
+start output_for_paraview_timestep
+
+start first inverse mapping
+
+WARNING: line search failed for element 0, vertex 0 at iteration 1
+WARNING: line search failed for element 0, vertex 1 at iteration 1
+WARNING: line search failed for element 0, vertex 2 at iteration 1
+WARNING: line search failed for element 0, vertex 3 at iteration 1
+WARNING: line search failed for element 0, vertex 4 at iteration 1
+WARNING: line search failed for element 0, vertex 5 at iteration 1
+WARNING: line search failed for element 0, vertex 6 at iteration 1
+WARNING: line search failed for element 0, vertex 7 at iteration 1
+WARNING: line search failed for element 0, vertex 8 at iteration 1
+WARNING: line search failed for element 0, vertex 9 at iteration 1
+WARNING: line search failed for element 0, vertex 10 at iteration 1
+WARNING: line search failed for element 0, vertex 11 at iteration 1
+WARNING: line search failed for element 0, vertex 12 at iteration 1
+WARNING: line search failed for element 0, vertex 13 at iteration 1
+WARNING: line search failed for element 0, vertex 14 at iteration 1
+WARNING: line search failed for element 0, vertex 15 at iteration 1
+WARNING: line search failed for element 0, vertex 16 at iteration 1
+WARNING: line search failed for element 0, vertex 17 at iteration 1
+WARNING: line search failed for element 0, vertex 18 at iteration 1
+WARNING: line search failed for element 0, vertex 19 at iteration 1
+WARNING: line search failed for element 0, vertex 20 at iteration 1
+WARNING: line search failed for element 0, vertex 21 at iteration 1
+WARNING: line search failed for element 0, vertex 22 at iteration 1
+WARNING: line search failed for element 0, vertex 23 at iteration 1
+WARNING: line search failed for element 0, vertex 24 at iteration 1
+WARNING: line search failed for element 0, vertex 25 at iteration 1
+WARNING: line search failed for element 0, vertex 26 at iteration 1
+start second inverse mapping
+
+GaussianElimination is performed.
+Finish GaussianElimination
+GaussianElimination is performed.
+Finish GaussianElimination
+GaussianElimination is performed.
+Finish GaussianElimination
+start output new input file
+
+	Postprocess time:	0.812[s]
+
+	All analysis time:	0.812[s]

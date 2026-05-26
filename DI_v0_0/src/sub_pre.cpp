@@ -3199,10 +3199,9 @@ void gp_switch(bool flag, information *info)
 void First_inverse_mapping(information *info)
 {
 	int i,j,k;
-	double MAX_ITER = 1000;
+	double MAX_ITER = 100;
 	double MAX_RESIDUAL = 1.0e-10;
 	double residual_norm = 0.0;
-	vector<double> para_patch_coord(info->DIMENSION, 0.5); // 初期値は自然座標の中心点
 
 	int vertex_num;
 	if (info->DIMENSION == 2)
@@ -3216,6 +3215,7 @@ void First_inverse_mapping(information *info)
 	{
 		for (j = 0; j < vertex_num; j++)
 		{
+			vector<double> para_patch_coord(info->DIMENSION, 0.5); // 各頂点ごとに初期値をリセット
 			for (k = 0; k < MAX_ITER; k++)
 			{
 				// calculate residulal vector: R(ξ) = N(ξ) * X - x
@@ -3236,12 +3236,10 @@ void First_inverse_mapping(information *info)
 				residual_norm = sqrt(residual_norm);
 
 				// debug
-				printf("Element %d, Vertex %d, Iteration %d: para_patch_coord = (", i, j, k);
-				for (int d = 0; d < info->DIMENSION; d++)
-				    printf("%f ", para_patch_coord[d]);
-				printf(")\n");
-
-				// printf("Element %d, Vertex %d, Iteration %d: Residual Norm = %e\n", i, j, k, residual_norm);
+				// printf("Element %d, Vertex %d, Iteration %d: para_patch_coord = (", i, j, k);
+				// for (int d = 0; d < info->DIMENSION; d++)
+				//     printf("%f ", para_patch_coord[d]);
+				// printf(")\n");
 
 				// convergence check
 				if (residual_norm < MAX_RESIDUAL)
@@ -3257,25 +3255,58 @@ void First_inverse_mapping(information *info)
 				vector<double> dummy_B(MAX_NO_CP_ON_ELEMENT * info->DIMENSION);
 				Make_B_component(temp_ele, para_ele_coord.data(), dummy_B.data(), info, 1, Jacobian_inverse.data());
 
-				// Note: Jacobian is stored in column-major order (index = col*DIM + row)
+				// Jacobian inverse is stored in row-major order
 				for (int d = 0; d < info->DIMENSION; d++) {
 					double sum = 0.0;
 					for (int e = 0; e < info->DIMENSION; e++)
-						sum += Jacobian_inverse[e * info->DIMENSION + d] * Residual_vector[e];
+						sum += Jacobian_inverse[d * info->DIMENSION + e] * Residual_vector[e];
 					delta_para[d] = -sum;
 				}
 				
-				// update ξ: ξ = ξ + delta ξ
-				for (int d = 0; d < info->DIMENSION; d++)
-					para_patch_coord[d] += delta_para[d];
+				// damped update: accept only when the residual decreases
+				double alpha = 1.0;
+				bool accepted = false;
+				vector<double> trial_para(info->DIMENSION, 0.0);
+				vector<double> trial_ele_coord(info->DIMENSION, 0.0);
+				vector<double> trial_pc(info->DIMENSION, 0.0);
+				vector<double> trial_residual(info->DIMENSION, 0.0);
 
-				// ξは0.0~1.0の間しかとらない。超える場合は最小、または最大値に修正
-				for (int d = 0; d < info->DIMENSION; d++)
+				for (int ls = 0; ls < 30; ls++)
 				{
-					if (para_patch_coord[d] >= 1.0)
-						para_patch_coord[d] = 1.0;
-					if (para_patch_coord[d] <= 0.0)
-						para_patch_coord[d] = 0.0;
+					for (int d = 0; d < info->DIMENSION; d++)
+					{
+						trial_para[d] = para_patch_coord[d] + alpha * delta_para[d];
+						if (trial_para[d] >= 1.0)
+							trial_para[d] = 1.0;
+						if (trial_para[d] <= 0.0)
+							trial_para[d] = 0.0;
+					}
+
+					temp_ele = ele_check(info->Global_local_patch, trial_para.data(), info);
+					tilde_coord(trial_ele_coord.data(), trial_para.data(), info->Element_patch[temp_ele], temp_ele, info);
+					physical_coord(temp_ele, trial_ele_coord.data(), trial_pc.data(), info);
+					for (int d = 0; d < info->DIMENSION; d++)
+						trial_residual[d] = trial_pc[d] - info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d];
+
+					double trial_residual_norm = 0.0;
+					for (int d = 0; d < info->DIMENSION; d++)
+						trial_residual_norm += trial_residual[d] * trial_residual[d];
+					trial_residual_norm = sqrt(trial_residual_norm);
+
+					if (trial_residual_norm < residual_norm)
+					{
+						para_patch_coord = trial_para;
+						accepted = true;
+						break;
+					}
+
+					alpha *= 0.5;
+				}
+
+				if (!accepted)
+				{
+					printf("WARNING: line search failed for element %d, vertex %d at iteration %d\n", i, j, k);
+					break;
 				}
 			}
 			if (k == MAX_ITER)
@@ -3283,32 +3314,30 @@ void First_inverse_mapping(information *info)
 				printf("ERROR: Maximum iterations reached without convergence for vertex %d of element %d\n", j, i);
 				exit(1);
 			}
-			else 
-				printf("Vertex %d of element %d converged in %d iterations with residual norm %e\n", j, i, k, residual_norm);
 		}
 	}
-	// debug
-	for (i = 0; i < local_ele_num; i++)
-	{
-		for (j = 0; j < vertex_num; j++)
-		{
-			printf("Element %d, Vertex %d: Target Physical Coord = (", i, j);
-			for (int d = 0; d < info->DIMENSION; d++)
-				printf("%f ", info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d]);
-			printf("), Target Para Coord = (");
-			for (int d = 0; d < info->DIMENSION; d++)
-				printf("%f ", info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + d]);
-			printf(")\n");
-		}
-	}
+	// // debug
+	// for (i = 0; i < local_ele_num; i++)
+	// {
+	// 	for (j = 0; j < vertex_num; j++)
+	// 	{
+	// 		printf("Element %d, Vertex %d: Target Physical Coord = (", i, j);
+	// 		for (int d = 0; d < info->DIMENSION; d++)
+	// 			printf("%f ", info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d]);
+	// 		printf("), Target Para Coord = (");
+	// 		for (int d = 0; d < info->DIMENSION; d++)
+	// 			printf("%f ", info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + d]);
+	// 		printf(")\n");
+	// 	}
+	// }
 }
 
 
 // Second Inverse mapping: 最小二乗法によって、ローカルIGA解析モデルの制御点を移動させる
 void Second_inverse_mapping(information *info)
 {
-	const int fasten_flag_x = 0; // 0: fasten, 1: calculate
-	const int fasten_flag_y = 0; // 0: fasten, 1: calculate
+	const int fasten_flag_x = 1; // 0: fasten, 1: calculate
+	const int fasten_flag_y = 1; // 0: fasten, 1: calculate
 	const int fasten_flag_z = 1; // 0: fasten, 1: calculate
 	const int element_num = info->Geo_Total_Element_on_mesh;
 	const int sample_num = (info->DIMENSION == 2) ? 9 : 27;
@@ -3321,10 +3350,15 @@ void Second_inverse_mapping(information *info)
 
 	for (int ele = 0; ele < element_num; ele++)
 	{
-		const int patch = info->Element_patch[ele];
-		const int cp_num = info->No_Control_point_ON_ELEMENT[patch];
+		const int patch = info->Geo_Element_patch[ele];
+		const int conn_cp_num = info->Geo_No_Control_point_ON_ELEMENT[patch];
+		if (conn_cp_num <= 0 || conn_cp_num > MAX_NO_CP_ON_ELEMENT)
+		{
+			printf("ERROR: invalid connectivity control-point count %d for patch %d\n", conn_cp_num, patch);
+			exit(1);
+		}
 
-		vector<double> shape_matrix(sample_num * cp_num, 0.0);
+		vector<double> shape_matrix(sample_num * conn_cp_num, 0.0);
 		vector<double> target(sample_num * info->DIMENSION, 0.0);
 
 		for (int j = 0; j < sample_num; j++)
@@ -3364,8 +3398,8 @@ void Second_inverse_mapping(information *info)
 			vector<double> dR(MAX_NO_CP_ON_ELEMENT * info->DIMENSION, 0.0);
 			geo_shape_and_dshape(R.data(), dR.data(), vertex_para.data(), ele, true, info);
 
-			for (int cp = 0; cp < cp_num; cp++)
-				shape_matrix[j * cp_num + cp] = R[cp];
+			for (int cp = 0; cp < conn_cp_num; cp++)
+				shape_matrix[j * conn_cp_num + cp] = R[cp];
 
 			for (int d = 0; d < info->DIMENSION; d++)
 				target[j * info->DIMENSION + d] = info->Target_Para_Coord[(ele * sample_num + j) * info->DIMENSION + d];
@@ -3377,32 +3411,34 @@ void Second_inverse_mapping(information *info)
 			if ((d == 0 && fasten_flag_x == 0) || (d == 1 && fasten_flag_y == 0) || (d == 2 && fasten_flag_z == 0))
 				continue;
 
-			vector<double> normal_matrix(cp_num * cp_num, 0.0);
-			vector<double> rhs(cp_num, 0.0);
-			vector<double> solution(cp_num, 0.0);
+			vector<double> normal_matrix(conn_cp_num * conn_cp_num, 0.0);
+			vector<double> rhs(conn_cp_num, 0.0);
+			vector<double> solution(conn_cp_num, 0.0);
 
-			for (int cp1 = 0; cp1 < cp_num; cp1++)
+			for (int cp1 = 0; cp1 < conn_cp_num; cp1++)
 			{
-				for (int cp2 = 0; cp2 < cp_num; cp2++)
+				for (int cp2 = 0; cp2 < conn_cp_num; cp2++)
 				{
 					double sum = 0.0;
 					for (int v = 0; v < sample_num; v++)
-						sum += shape_matrix[v * cp_num + cp1] * shape_matrix[v * cp_num + cp2];
-					normal_matrix[cp1 * cp_num + cp2] = sum;
+						sum += shape_matrix[v * conn_cp_num + cp1] * shape_matrix[v * conn_cp_num + cp2];
+					normal_matrix[cp1 * conn_cp_num + cp2] = sum;
 				}
 
 				double sum = 0.0;
 					for (int v = 0; v < sample_num; v++)
-					sum += shape_matrix[v * cp_num + cp1] * target[v * info->DIMENSION + d];
+					sum += shape_matrix[v * conn_cp_num + cp1] * target[v * info->DIMENSION + d];
 				rhs[cp1] = sum;
 			}
 
-			GaussianElimination(solution.data(), rhs.data(), normal_matrix.data(), cp_num);
+			GaussianElimination(solution.data(), rhs.data(), normal_matrix.data(), conn_cp_num);
 
-			for (int cp = 0; cp < cp_num; cp++)
+			for (int cp = 0; cp < conn_cp_num; cp++)
 			{
-				const int global_cp = info->Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + cp];
+				const int global_cp = info->Geo_Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + cp];
 				info->New_Node_Coordinate[global_cp * (info->DIMENSION + 1) + d] = solution[cp];
+				//debug
+				// printf("Element %d, Control Point %d, Dimension %d: New Coordinate = %f\n", ele, global_cp, d, solution[cp]);
 			}
 		}
 	}

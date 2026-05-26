@@ -753,7 +753,7 @@ void GMRES(int length, double eps, information *info)
 // Gaussian Elimination
 void GaussianElimination(double *sol, double *r, double *A, int size)
 {
-	cout << "GaussianElimination is performed." << endl;
+	// cout << "GaussianElimination is performed." << endl;
 	double *r_for_swap = (double *)malloc(sizeof(double) * size);
 
 	// 前進消去
@@ -807,7 +807,7 @@ void GaussianElimination(double *sol, double *r, double *A, int size)
 		}
 	}
 
-	cout << "Finish GaussianElimination" << endl;
+	// cout << "Finish GaussianElimination" << endl;
 }
 
 
