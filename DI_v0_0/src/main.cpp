@@ -127,11 +127,8 @@ int main(int argc, char **argv)
 		printf("start calc on element vertex\n\n");
 		Calc_on_Element_Vertex(&info);
 
-		if (argv[argc - 2] == nullptr)
-		{
-			printf("vertex data is missing: only vertex output mode\n\n");
-			exit(0);
-		}
+		// printf("only vertex output mode\n\n");
+		// exit(0);
 	}
 
 	// check geometry only output

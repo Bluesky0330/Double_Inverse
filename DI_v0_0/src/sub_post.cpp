@@ -152,25 +152,70 @@ void Calc_on_Element_Vertex(information *info)
 // 移動した制御点の座標を新しいInputとして出力する関数
 void Output_new_input_file(information *info)
 {
-	char raw_name[256] = "second_inverse_new_control_points.txt";
-	FILE *fp_cp = fopen(raw_name, "w");
-	if (fp_cp == NULL)
+	char raw_name_1[256] = "first_inverse_natural_points.txt";
+	FILE *fp_cp1 = fopen(raw_name_1, "w");
+	if (fp_cp1 == NULL)
 	{
-		printf("Cannot open output file: %s\n", raw_name);
+		printf("Cannot open output file: %s\n", raw_name_1);
+		exit(1);
+	}
+	
+	int vertex_num = 0;
+	if (info->DIMENSION == 2)
+		vertex_num = 9;
+	else if (info->DIMENSION == 3)
+		vertex_num = 27;
+
+	// element_id	point_id	x	y	z
+	if (info->DIMENSION == 2)
+	{
+		fprintf(fp_cp1, "element_id\tpoint_id\tx\ty\n");
+	}
+	else if (info->DIMENSION == 3)
+	{
+		fprintf(fp_cp1, "element_id\tpoint_id\tx\ty\tz\n");
+	}
+
+	for (int i = 0; i < info->Geo_Total_Element_on_mesh; i++)
+	{
+		for (int j = 0; j < vertex_num; j++)
+		{
+			double temp_point[MAX_DIMENSION] = {0.0};
+			
+			// make temp_point
+			for (int k = 0; k < info->DIMENSION; k++)
+				temp_point[k] = info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + k];
+
+			// output file
+			fprintf(fp_cp1, "%d", i);
+			fprintf(fp_cp1, "\t%d", j);
+			for (int k = 0; k < info->DIMENSION; k++)
+				fprintf(fp_cp1, " %.20e", temp_point[k]);
+			fprintf(fp_cp1, "\n");
+		}
+	}
+	fclose(fp_cp1);
+
+
+	char raw_name_2[256] = "second_inverse_new_control_points.txt";
+	FILE *fp_cp2 = fopen(raw_name_2, "w");
+	if (fp_cp2 == NULL)
+	{
+		printf("Cannot open output file: %s\n", raw_name_2);
 		exit(1);
 	}
 
 	int node_num = info->Geo_Total_Control_Point_on_mesh;
-	fprintf(fp_cp, "# control point data for second inverse mapping\n");
-	fprintf(fp_cp, "# format: id x y [z] w\n");
+	fprintf(fp_cp2, "# control point data for second inverse mapping\n");
+	fprintf(fp_cp2, "# format: id x y [z] w\n");
 	for (int i = 0; i < node_num; i++)
 	{
-		fprintf(fp_cp, "%d", i);
+		fprintf(fp_cp2, "%d", i);
 		for (int j = 0; j < info->DIMENSION + 1; j++)
-			fprintf(fp_cp, " %.20e", info->New_Node_Coordinate[i * (info->DIMENSION + 1) + j]);
-		fprintf(fp_cp, "\n");
+			fprintf(fp_cp2, " %.20e", info->New_Node_Coordinate[i * (info->DIMENSION + 1) + j]);
+		fprintf(fp_cp2, "\n");
 	}
-	fclose(fp_cp);
+	fclose(fp_cp2);
 }
 
 

@@ -4,7 +4,8 @@ PROGRAM_NAME = DI
 # INPUT_NAME := SCCHP_v6_coarse
 # INPUT_NAME := SCCHP_v7_coarse
 # INPUT_NAME := SCCHP_v8_coarse
-INPUT_NAME := SCCHP_v9_coarse
+# INPUT_NAME := SCCHP_v9_coarse
+INPUT_NAME := SCCHP_v10_coarse
 
 # 出力ディレクトリをインプット名から自動生成
 OUTPUT_DIR := output_$(INPUT_NAME)

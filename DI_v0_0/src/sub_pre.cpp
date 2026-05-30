@@ -1,6 +1,7 @@
 // header
 #include "_header.hpp"
 #include "_sub.hpp"
+#include <unordered_map>
 
 using namespace std;
 
@@ -3316,29 +3317,58 @@ void First_inverse_mapping(information *info)
 			}
 		}
 	}
-	// // debug
-	// for (i = 0; i < local_ele_num; i++)
-	// {
-	// 	for (j = 0; j < vertex_num; j++)
-	// 	{
-	// 		printf("Element %d, Vertex %d: Target Physical Coord = (", i, j);
-	// 		for (int d = 0; d < info->DIMENSION; d++)
-	// 			printf("%f ", info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d]);
-	// 		printf("), Target Para Coord = (");
-	// 		for (int d = 0; d < info->DIMENSION; d++)
-	// 			printf("%f ", info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + d]);
-	// 		printf(")\n");
-	// 	}
-	// }
+
+	// デバッグ：残差ベクトルから、自然座標から物理座標へのマッピングの精度を確認
+	// 丸目誤差を計算して、自然座標から物理座標へのマッピングの精度を確認する
+	double max_residual_norm = 0.0;
+	double sum_residual_norm = 0.0;
+	// per-element diagnostics
+	vector<double> elem_max(local_ele_num, 0.0);
+	vector<double> elem_sum(local_ele_num, 0.0);
+	vector<int> elem_count(local_ele_num, 0);
+	vector<int> bad_shape_count(local_ele_num, 0);
+	for (i = 0; i < local_ele_num; i++)
+	{
+		for (j = 0; j < vertex_num; j++)
+		{
+			vector<double> para_patch_coord(info->DIMENSION, 0.0);
+			vector<double> para_ele_coord(info->DIMENSION, 0.0);
+			vector<double> pc(info->DIMENSION, 0.0);
+
+			for (int d = 0; d < info->DIMENSION; d++)
+				para_patch_coord[d] = info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + d];
+
+			int temp_ele = ele_check(info->Global_local_patch, para_patch_coord.data(), info);
+			tilde_coord(para_ele_coord.data(), para_patch_coord.data(), info->Element_patch[temp_ele], temp_ele, info);
+			physical_coord(temp_ele, para_ele_coord.data(), pc.data(), info);
+
+			double residual_norm = 0.0;
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				double residual = pc[d] - info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d];
+				residual_norm += residual * residual;
+			}
+			residual_norm = sqrt(residual_norm);
+
+			// printf("Element %d, Vertex %d: Residual Norm = %e\n", i, j, residual_norm);
+			if (residual_norm > max_residual_norm)
+				max_residual_norm = residual_norm;
+			sum_residual_norm += residual_norm;
+		}	
+	}
+
+	printf("Maximum Residual Norm = %e\n", max_residual_norm);
+	printf("Average Residual Norm = %e\n", sum_residual_norm / (local_ele_num * vertex_num));
+	printf("\n");
 }
 
 
 // Second Inverse mapping: 最小二乗法によって、ローカルIGA解析モデルの制御点を移動させる
 void Second_inverse_mapping(information *info)
 {
-	const int fasten_flag_x = 1; // 0: fasten, 1: calculate
-	const int fasten_flag_y = 1; // 0: fasten, 1: calculate
-	const int fasten_flag_z = 1; // 0: fasten, 1: calculate
+	// const int fasten_flag_x = 1; // 0: fasten, 1: calculate
+	// const int fasten_flag_y = 1; // 0: fasten, 1: calculate
+	// const int fasten_flag_z = 1; // 0: fasten, 1: calculate
 	const int element_num = info->Geo_Total_Element_on_mesh;
 	const int sample_num = (info->DIMENSION == 2) ? 9 : 27;
 
@@ -3408,9 +3438,6 @@ void Second_inverse_mapping(information *info)
 		// Solve normal equations: (A^T * A) * x = A^T * b
 		for (int d = 0; d < info->DIMENSION; d++)
 		{
-			if ((d == 0 && fasten_flag_x == 0) || (d == 1 && fasten_flag_y == 0) || (d == 2 && fasten_flag_z == 0))
-				continue;
-
 			vector<double> normal_matrix(conn_cp_num * conn_cp_num, 0.0);
 			vector<double> rhs(conn_cp_num, 0.0);
 			vector<double> solution(conn_cp_num, 0.0);
@@ -3442,6 +3469,80 @@ void Second_inverse_mapping(information *info)
 			}
 		}
 	}
+	// デバッグ：新しい制御点座標からパラメータ空間座標に写像し、インプットで与えた要素頂点との誤差を確認
+	double max_residual_norm = 0.0;
+	double sum_residual_norm = 0.0;
+	for (int ele = 0; ele < element_num; ele++)
+	{
+		for (int j = 0; j < sample_num; j++)
+		{
+			vector<double> vertex_para(info->DIMENSION, 0.0);
+			vector<double> local_para_coord(info->DIMENSION, 0.0);
+			vector<double> global_para_coord(info->DIMENSION, 0.0);
+			vector<double> global_para_coord_tilde(info->DIMENSION, 0.0);
+			vector<double> pc_test(info->DIMENSION, 0.0);
+			if (info->DIMENSION == 2)
+			{
+				const double sample_coord[9][2] = {
+					{-1.0, -1.0}, {0.0, -1.0}, {1.0, -1.0},
+					{-1.0,  0.0}, {0.0,  0.0}, {1.0,  0.0},
+					{-1.0,  1.0}, {0.0,  1.0}, {1.0,  1.0}
+				};
+				vertex_para[0] = sample_coord[j][0];
+				vertex_para[1] = sample_coord[j][1];
+			}
+			else if (info->DIMENSION == 3)
+			{
+				const double sample_coord[27][3] = {
+					{-1.0, -1.0, -1.0}, { 0.0, -1.0, -1.0}, { 1.0, -1.0, -1.0},
+					{-1.0,  0.0, -1.0}, { 0.0,  0.0, -1.0}, { 1.0,  0.0, -1.0},
+					{-1.0,  1.0, -1.0}, { 0.0,  1.0, -1.0}, { 1.0,  1.0, -1.0},
+
+					{-1.0, -1.0,  0.0}, { 0.0, -1.0,  0.0}, { 1.0, -1.0,  0.0},
+					{-1.0,  0.0,  0.0}, { 0.0,  0.0,  0.0}, { 1.0,  0.0,  0.0},
+					{-1.0,  1.0,  0.0}, { 0.0,  1.0,  0.0}, { 1.0,  1.0,  0.0},
+
+					{-1.0, -1.0,  1.0}, { 0.0, -1.0,  1.0}, { 1.0, -1.0,  1.0},
+					{-1.0,  0.0,  1.0}, { 0.0,  0.0,  1.0}, { 1.0,  0.0,  1.0},
+					{-1.0,  1.0,  1.0}, { 0.0,  1.0,  1.0}, { 1.0,  1.0,  1.0}
+				};
+				vertex_para[0] = sample_coord[j][0];
+				vertex_para[1] = sample_coord[j][1];
+				vertex_para[2] = sample_coord[j][2];
+			}
+		
+			geo_trans_ele_patch_coord(local_para_coord.data(), vertex_para.data(), info->Geo_Element_patch[ele], ele, info);
+			geo_parameter_coord(ele, local_para_coord.data(), global_para_coord.data(), info);
+
+			int glo_ele = ele_check(info->Global_local_patch, global_para_coord.data(), info);
+			tilde_coord(global_para_coord_tilde.data(), global_para_coord.data(), info->Element_patch[glo_ele], glo_ele, info);
+
+			vector<double> R(MAX_NO_CP_ON_ELEMENT, 0.0);
+			shape_and_dshape(R.data(), global_para_coord_tilde.data(), glo_ele, info);
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				pc_test[d] = 0.0;
+				for (int cp = 0; cp < info->No_Control_point_ON_ELEMENT[info->Element_patch[glo_ele]]; cp++)
+				{
+					int global_cp = info->Controlpoint_of_Element[glo_ele * MAX_NO_CP_ON_ELEMENT + cp];
+					pc_test[d] += R[cp] * info->New_Node_Coordinate[global_cp * (info->DIMENSION + 1) + d];
+				}
+			}
+
+			double residual_norm = 0.0;
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				double residual = pc_test[d] - info->Target_Para_Coord[(ele * sample_num + j) * info->DIMENSION + d];
+				residual_norm += residual * residual;
+			}
+			double rnorm = sqrt(residual_norm);
+
+			max_residual_norm = std::max(max_residual_norm, rnorm);
+			sum_residual_norm += rnorm;
+		}
+	}
+	printf("Maximum Residual Norm = %e\n", max_residual_norm);
+	printf("Average Residual Norm = %e\n", sum_residual_norm / (element_num * sample_num));
 }
 
 // calcurate B
