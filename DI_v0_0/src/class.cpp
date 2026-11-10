@@ -336,7 +336,7 @@ void sub_ele_J::init(information *info)
 		opp_para_tilde.resize(gp_num * info->DIMENSION, 0.0);
 		for (int i = 0; i < gp_num; i++)
 		{
-			overlay[i] = true;　// SS-IGAでは全てオーバーラップする前提
+			overlay[i] = true; // SS-IGAでは全てオーバーラップする前提
 			double *opp_para_tilde_ptr = opp_para_tilde.data() + i * info->DIMENSION;
 			int e_glo = trans_local_para_to_global_para(e, para_tilde.data() + i * info->DIMENSION, opp_para_tilde_ptr, info);
 			overlay_ele[i] = e_glo;

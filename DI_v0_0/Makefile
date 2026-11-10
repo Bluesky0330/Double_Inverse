@@ -5,7 +5,11 @@ PROGRAM_NAME = DI
 # INPUT_NAME := SCCHP_v7_coarse
 # INPUT_NAME := SCCHP_v8_coarse
 # INPUT_NAME := SCCHP_v9_coarse
-INPUT_NAME := SCCHP_v10_coarse
+# INPUT_NAME := SCCHP_v10_coarse
+INPUT_NAME := SCCHP_one_eighth_0.4_fine
+# INPUT_NAME := SCCHP_one_eighth_0.4_fine_NC
+# INPUT_NAME := SCCHP_one_eighth_0.4_fine_PC
+# INPUT_NAME := SCCHP_local
 
 # 出力ディレクトリをインプット名から自動生成
 OUTPUT_DIR := output_$(INPUT_NAME)
@@ -49,7 +53,7 @@ DI_optimized: compile_optimized rm mkdir_output
 	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src_fast/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input_glo.txt ../input/$(INPUT_NAME)/input_loc.txt ../input/$(INPUT_NAME)/input_vertex.txt ./option_DI.ini $(COMMANDS2)
 
 IGA: compile rm mkdir_output
-	cd ./analysis/material && ./cp.sh ./option_IGA.ini
+	cd ./analysis/material && ./cp.sh ./option_DI.ini
 	cd ./analysis/$(OUTPUT_DIR) && . ../setenv.sh && $(COMMANDS1) ../../src/$(PROGRAM_NAME).x ../input/$(INPUT_NAME)/input.txt ./option_IGA.ini $(COMMANDS2)
 
 debug: compile rm mkdir_output

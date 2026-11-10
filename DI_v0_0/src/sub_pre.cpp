@@ -112,6 +112,22 @@ void Set_Option_Data(information *info)
 }
 
 
+// constant.ini の値(整数でも小数でも書けるように、どちらの型で保持されていても数値として取り出す)
+static bool option_number(const information *info, size_t idx, double &out)
+{
+	if (idx >= info->c.data_vec.size())
+		return false;
+	const std::any &a = info->c.data_vec[idx];
+	if (a.type() == typeid(int))
+		out = (double)std::any_cast<int>(a);
+	else if (a.type() == typeid(double))
+		out = std::any_cast<double>(a);
+	else
+		return false;
+	return true;
+}
+
+
 // memory allocation
 void Allocation(const int num, information *info)
 {
@@ -126,6 +142,35 @@ void Allocation(const int num, information *info)
 		info->c.USE_EXTENDED_QUADRATURE       = any_cast<int>(info->c.data_vec[3]);
 		info->c.NUM_GAUSS_POINTS              = any_cast<int>(info->c.data_vec[4]);
 		info->c.NUM_GAUSS_POINTS_EXTENDED     = any_cast<int>(info->c.data_vec[5]);
+
+		// second inverse mapping: 自然座標の面上の制御点を既知(固定)にする。constant.ini の 7〜9 番目の項目。
+		// 項目が無い場合は無効。
+		{
+			double v_enable = 0.0, v_axis = 0.0, v_pos = 0.0;
+			info->c.FIX_PLANE_ENABLE = 0;
+			if (option_number(info, 6, v_enable))
+				info->c.FIX_PLANE_ENABLE = (int)llround(v_enable);
+			if (info->c.FIX_PLANE_ENABLE != 0)
+			{
+				if (!option_number(info, 7, v_axis) || !option_number(info, 8, v_pos))
+				{
+					printf("ERROR: FIX_PLANE_ENABLE is on, but FIX_PLANE_AXIS / FIX_PLANE_POSITION are missing in constant.ini\n");
+					exit(1);
+				}
+				info->c.FIX_PLANE_AXIS = (int)llround(v_axis);
+				info->c.FIX_PLANE_POSITION = v_pos;
+				if (fabs(v_axis - llround(v_axis)) > 1.0e-12 || info->c.FIX_PLANE_AXIS < 0 || info->c.FIX_PLANE_AXIS > 2)
+				{
+					printf("ERROR: FIX_PLANE_AXIS must be 0 (xi plane), 1 (eta plane) or 2 (zeta plane) (got %g)\n", v_axis);
+					exit(1);
+				}
+				if (!(v_pos >= 0.0 && v_pos <= 1.0))
+				{
+					printf("ERROR: FIX_PLANE_POSITION must be in [0.0, 1.0] (got %g)\n", v_pos);
+					exit(1);
+				}
+			}
+		}
 
 		info->Total_Knot_to_mesh = (int *)calloc((Total_mesh + 1), sizeof(int));
 		info->Total_Patch_on_mesh = (int *)malloc(sizeof(int) * (Total_mesh));			  // 各メッシュ上のパッチ数
@@ -400,8 +445,8 @@ void Allocation(const int num, information *info)
 		// memory allocation
 		int Element_vertex = info->Geo_Total_Element_on_mesh;
 		Element_vertex *= pow_int(3, info->DIMENSION);
-		info->Target_Physical_Coord = (double *)malloc(sizeof(double) * Element_vertex * info->DIMENSION); // Target_Physical_Coord[Element_vertex][info->DIMENSION]
-		info->Target_Para_Coord = (double *)malloc(sizeof(double) * Element_vertex * info->DIMENSION); // Target_Para_Coord[Element_vertex][info->DIMENSION]
+		info->Target_Physical_Coord = (double *)calloc(Element_vertex * info->DIMENSION, sizeof(double)); // Target_Physical_Coord[Element_vertex][info->DIMENSION]
+		info->Target_Para_Coord = (double *)calloc(Element_vertex * info->DIMENSION, sizeof(double)); // Target_Para_Coord[Element_vertex][info->DIMENSION]
 		info->New_Node_Coordinate = (double *)malloc(sizeof(double) * (info->Geo_Total_Control_Point_on_mesh * (info->DIMENSION + 1)));
 		if (info->Target_Physical_Coord == NULL || info->Target_Para_Coord == NULL || info->New_Node_Coordinate == NULL)
 		{
@@ -1270,14 +1315,38 @@ void Get_Input_2(int tm, const char *filename, information *info)
 }
 
 
+// 入力ファイルで指定された自由表面(グローバル自然座標の面)上の点。
+// 入力の形式: 要素番号 点番号 軸 量(軸 0:ξ, 1:η, 2:ζ。量はその軸のグローバル自然座標の値)。
+// 添字 (要素 * 頂点数 + 点番号) * 次元 + 軸 が 1 のとき、その点のその軸(0:ξ, 1:η, 2:ζ)は面上に固定される。
+// 軸はグローバルパッチの自然座標の軸であり、ローカル要素の向きとは無関係。
+static vector<signed char> g_user_face_axis;
+// 上記の固定値(グローバル自然座標での量)。
+static vector<double> g_user_face_value;
+
+// 行内の空白区切りトークン数
+static int count_tokens(const char *s)
+{
+	int n = 0;
+	bool in_token = false;
+	for (; *s; s++)
+	{
+		const bool sp = (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n');
+		if (!sp && !in_token)
+		{
+			n++;
+			in_token = true;
+		}
+		else if (sp)
+			in_token = false;
+	}
+	return n;
+}
+
+
 void Get_Input_3(const char *filename, information *info)
 {
 	// 入力ファイルから情報を読み取る関数
-	char s[256];
 	int temp_i, temp_i2;
-	double temp_d, temp_d2, temp_d3;
-	
-	int i,j;
 
 	// ローカルIGA解析モデルの要素数の取得
 	int local_ele_num = info->Geo_Total_Element_on_mesh;
@@ -1296,23 +1365,114 @@ void Get_Input_3(const char *filename, information *info)
 	FILE *fp = fopen(filename, "r");
 	if (fp == NULL)
 	{
-		printf("warning: Could not open file %s\n", filename);
-		return;
+		printf("ERROR: Could not open vertex file %s\n", filename);
+		exit(1);
 	}
 
-	// 一行目スキップ
-	fgets(s, 256, fp);
+	// 一行目(ヘッダ)スキップ
+	char line_buf[1024];
+	if (fgets(line_buf, sizeof(line_buf), fp) == NULL)
+	{
+		printf("ERROR: vertex file %s is empty\n", filename);
+		exit(1);
+	}
 
-	// 要素番号, 頂点番号, ξ, η, ζの順に入力ファイルに書いてあるINPUT
-	for (i = 0; i < local_ele_num; i++)
-		for (j = 0; j < num_vertex; j++)
+	// 点情報: 要素番号, 頂点番号, x, y, (z)。2Dでは余分な列があっても無視する。
+	// 自由表面: 要素番号, 点番号, 軸(0:ξ, 1:η, 2:ζ) の3列(点情報の後に空行を挟んで続く)。
+	//           軸はグローバル自然座標の軸で、その点がグローバルパッチの面上にあることを表す。
+	// 行ごとに読み、列数で種類を判別する(並び順に依存しない)。
+	vector<char> filled(local_ele_num * num_vertex, 0);
+	int read_count = 0;
+	g_user_face_axis.clear();
+	g_user_face_value.clear();
+	bool in_face_section = false;
+	long long face_entries = 0, face_dup = 0;
+	long long face_axis_count[MAX_DIMENSION] = {0, 0, 0};
+	while (fgets(line_buf, sizeof(line_buf), fp) != NULL)
+	{
+		const int ntok = count_tokens(line_buf);
+		if (ntok == 0) // 空行: 点情報の後の最初の空行から自由表面のセクションとみなす
 		{
-			fscanf(fp, "%d %d %lf %lf %lf", &temp_i, &temp_i2, &temp_d, &temp_d2, &temp_d3);
-			info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 0] = temp_d;
-			info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 1] = temp_d2;
-			info->Target_Physical_Coord[(i * num_vertex + j) * info->DIMENSION + 2] = temp_d3;
+			if (read_count > 0)
+				in_face_section = true;
+			continue;
 		}
+
+		// 自由表面の行: 要素番号 点番号 軸 量(4列)。
+		// 2D の点情報も4列になり得るので、空行以降のみ自由表面として扱う(3Dでは列数でも判別)。
+		if (in_face_section || (info->DIMENSION == 3 && ntok == 4))
+		{
+			int axis = -1;
+			double value = 0.0;
+			int nread = sscanf(line_buf, "%d %d %d %lf", &temp_i, &temp_i2, &axis, &value);
+			if (ntok != 4 || nread != 4 || !std::isfinite(value))
+			{
+				printf("ERROR: invalid free-surface line in vertex file (expected: element point axis value): %s", line_buf);
+				exit(1);
+			}
+			if (temp_i < 0 || temp_i >= local_ele_num || temp_i2 < 0 || temp_i2 >= num_vertex || axis < 0 || axis >= info->DIMENSION)
+			{
+				printf("ERROR: free-surface entry out of range (element %d, point %d, axis %d)\n", temp_i, temp_i2, axis);
+				exit(1);
+			}
+			if (g_user_face_axis.empty())
+			{
+				g_user_face_axis.assign((size_t)local_ele_num * num_vertex * info->DIMENSION, 0);
+				g_user_face_value.assign((size_t)local_ele_num * num_vertex * info->DIMENSION, 0.0);
+			}
+			const size_t fid = ((size_t)temp_i * num_vertex + temp_i2) * info->DIMENSION + axis;
+			if (g_user_face_axis[fid])
+			{
+				const double prev = g_user_face_value[fid];
+				if (fabs(prev - value) > 1.0e-12)
+				{
+					printf("ERROR: conflicting free-surface values for element %d, point %d, axis %d (%g vs %g)\n", temp_i, temp_i2, axis, prev, value);
+					exit(1);
+				}
+				face_dup++;
+			}
+			else
+			{
+				g_user_face_axis[fid] = 1;
+				g_user_face_value[fid] = value;
+				face_entries++;
+				face_axis_count[axis]++;
+			}
+			continue;
+		}
+
+		double v[3] = {0.0, 0.0, 0.0};
+		int n = sscanf(line_buf, "%d %d %lf %lf %lf", &temp_i, &temp_i2, &v[0], &v[1], &v[2]);
+		if (n < 2 + info->DIMENSION)
+		{
+			printf("ERROR: too few columns in vertex file line: %s", line_buf);
+			exit(1);
+		}
+		if (temp_i < 0 || temp_i >= local_ele_num || temp_i2 < 0 || temp_i2 >= num_vertex)
+		{
+			printf("ERROR: element/vertex id out of range (%d, %d) in vertex file\n", temp_i, temp_i2);
+			exit(1);
+		}
+		for (int d = 0; d < info->DIMENSION; d++)
+			info->Target_Physical_Coord[(temp_i * num_vertex + temp_i2) * info->DIMENSION + d] = v[d];
+		if (!filled[temp_i * num_vertex + temp_i2])
+		{
+			filled[temp_i * num_vertex + temp_i2] = 1;
+			read_count++;
+		}
+	}
 	fclose(fp);
+
+	if (read_count != local_ele_num * num_vertex)
+	{
+		printf("ERROR: vertex file has %d unique points, expected %d\n", read_count, local_ele_num * num_vertex);
+		exit(1);
+	}
+
+	if (face_entries > 0)
+		printf("Free-surface entries read: %lld (xi: %lld, eta: %lld, zeta: %lld), duplicated lines ignored: %lld\n", face_entries, face_axis_count[0], face_axis_count[1], face_axis_count[2], face_dup);
+	else
+		printf("No free-surface section in the vertex file: no component is fixed in the first inverse mapping\n");
 
 	// debug
 	// for (i = 0; i < local_ele_num; i++)
@@ -2516,7 +2676,7 @@ int ele_check(int patch_n, double *para_coord, information *info)
 // ローカルのパラメータ空間座標を与えると、ローカル形状表現の要素を得る
 int geo_ele_check(int patch_n, double *para_coord, information *info)
 {
-	int line[MAX_DIMENSION];
+	int line[MAX_DIMENSION] = {0};
 	for (int i = 0; i < info->DIMENSION; i++)
 	{
 		int line_counter = 0;
@@ -3196,12 +3356,65 @@ void gp_switch(bool flag, information *info)
 }
 
 
+// グローバルパッチの自然座標の定義域 [lo, hi] をノットベクトルから取得する(0~1決め打ちを避ける)
+static void get_global_patch_domain(information *info, double *lo, double *hi)
+{
+	const int p = info->Global_local_patch;
+	for (int d = 0; d < info->DIMENSION; d++)
+	{
+		const int base = info->Total_Knot_to_patch_dim[p * info->DIMENSION + d];
+		lo[d] = info->Position_Knots[base + info->Order[p * info->DIMENSION + d]];
+		hi[d] = info->Position_Knots[base + info->No_Control_point[p * info->DIMENSION + d]];
+	}
+}
+
+
+// 第一逆写像で得た目標点が最小二乗に使えるか(1: 有効, 0: 無効)。
+// 無効: 収束しなかった点 / 定義域の外へ許容誤差を超えて外れていた点
+static vector<char> g_target_para_valid;
+
+// n x n (n <= 3) の連立一次方程式を部分ピボット付きガウス消去で解く。特異なら false
+static bool solve_small_system(int n, double M[3][3], double *b, double *x)
+{
+	for (int c = 0; c < n; c++)
+	{
+		int piv = c;
+		for (int r = c + 1; r < n; r++)
+			if (fabs(M[r][c]) > fabs(M[piv][c]))
+				piv = r;
+		if (!(fabs(M[piv][c]) > 1.0e-300))
+			return false;
+		if (piv != c)
+		{
+			for (int k2 = 0; k2 < n; k2++)
+				std::swap(M[c][k2], M[piv][k2]);
+			std::swap(b[c], b[piv]);
+		}
+		for (int r = c + 1; r < n; r++)
+		{
+			const double f = M[r][c] / M[c][c];
+			for (int k2 = c; k2 < n; k2++)
+				M[r][k2] -= f * M[c][k2];
+			b[r] -= f * b[c];
+		}
+	}
+	for (int r = n - 1; r >= 0; r--)
+	{
+		double sum = b[r];
+		for (int k2 = r + 1; k2 < n; k2++)
+			sum -= M[r][k2] * x[k2];
+		x[r] = sum / M[r][r];
+	}
+	return true;
+}
+
+
 // First Inverese mapping: ニュートン法によってグローバルIGA解析モデルの物理座標から自然座標上のモデルを探索する
 void First_inverse_mapping(information *info)
 {
 	int i,j,k;
-	double MAX_ITER = 100;
-	double MAX_RESIDUAL = 1.0e-10;
+	double MAX_ITER = 10000;
+	double MAX_RESIDUAL = 1.0e-7;
 	double residual_norm = 0.0;
 
 	int vertex_num;
@@ -3211,12 +3424,134 @@ void First_inverse_mapping(information *info)
 		vertex_num = 27;
 
 	int local_ele_num = info->Geo_Total_Element_on_mesh;
-	
+
+	double dom_lo[MAX_DIMENSION] = {0.0}, dom_hi[MAX_DIMENSION] = {0.0};
+	get_global_patch_domain(info, dom_lo, dom_hi);
+
+	// 直線探索が止まった点の扱い:
+	//  - 定義域の境界に押し当てられて止まった点は、グローバル曲面の外にわずかにずれた目標点の
+	//    最近接点(射影)なので、残差がモデル寸法に対して十分小さければ有効として最小二乗に使う。
+	//  - 内部で止まった点、または残差が大きい点は信頼できないので無効にする。
+	const double BOUNDARY_ACCEPT_REL = 1.0e-3; // モデル寸法(グローバル制御点のバウンディングボックス対角)に対する比
+	double model_diag = 0.0;
+	{
+		double bmin[MAX_DIMENSION] = {1.0e300, 1.0e300, 1.0e300}, bmax[MAX_DIMENSION] = {-1.0e300, -1.0e300, -1.0e300};
+		for (int cp = 0; cp < info->Total_Control_Point_to_mesh[1]; cp++)
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				const double x = info->Node_Coordinate[cp * (info->DIMENSION + 1) + d];
+				bmin[d] = std::min(bmin[d], x);
+				bmax[d] = std::max(bmax[d], x);
+			}
+		for (int d = 0; d < info->DIMENSION; d++)
+			model_diag += (bmax[d] - bmin[d]) * (bmax[d] - bmin[d]);
+		model_diag = sqrt(model_diag);
+	}
+	const double BOUNDARY_ACCEPT_RESIDUAL = BOUNDARY_ACCEPT_REL * model_diag;
+	printf("Model diagonal = %e, boundary-stall acceptance residual = %e\n", model_diag, BOUNDARY_ACCEPT_RESIDUAL);
+	g_target_para_valid.assign((size_t)local_ele_num * vertex_num, 1);
+
+	struct StallInfo
+	{
+		int e, v;
+		double residual;
+		bool on_boundary, valid;
+		double x[MAX_DIMENSION];
+	};
+	vector<StallInfo> stall_list;
+
+	// 各頂点の初期自然座標(入力のローカルジオメトリ = グローバル自然座標空間)を求める。
+	//  - Newton 法の初期値に使う。
+	//  - 入力ファイル(自由表面リスト)で指定された成分は、指定された量に厳密に固定し、残りの成分だけを
+	//    解く(面内への射影)。固定する成分は解析者が入力で指定し、プログラム側では自動判定しない。
+	//  - 初期自然座標は、リストの指定が初期ジオメトリと整合しているかの検査にも使う。
+	vector<double> init_para((size_t)local_ele_num * vertex_num * info->DIMENSION, 0.0);
+	vector<signed char> face_flag((size_t)local_ele_num * vertex_num * info->DIMENSION, 0);
+	vector<double> face_value((size_t)local_ele_num * vertex_num * info->DIMENSION, 0.0); // 固定する面の値(自然座標)
+	long long n_face_vertices = 0;
+	const bool has_user_faces = !g_user_face_axis.empty();
+	const double USER_FACE_CHECK_TOL = 1.0e-6; // 入力の面指定と初期ジオメトリの食い違い許容(定義域長に対する比)
+	long long n_user_applied = 0, n_user_mismatch = 0;
+	for (int ie = 0; ie < local_ele_num; ie++)
+	{
+		const int patch_g = info->Geo_Element_patch[ie];
+		const int conn_n = info->Geo_No_Control_point_ON_ELEMENT[patch_g];
+		for (int jv = 0; jv < vertex_num; jv++)
+		{
+			double vp[MAX_DIMENSION] = {0.0};
+			vp[0] = (double)(jv % 3) - 1.0;
+			vp[1] = (double)((jv / 3) % 3) - 1.0;
+			if (info->DIMENSION == 3)
+				vp[2] = (double)(jv / 9) - 1.0;
+			vector<double> Rg(MAX_NO_CP_ON_ELEMENT, 0.0);
+			geo_shape_and_dshape(Rg.data(), vp, ie, info);
+			bool any_face = false;
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				double xg = 0.0;
+				for (int cp = 0; cp < conn_n; cp++)
+					xg += Rg[cp] * info->Geo_Node_Coordinate[info->Geo_Controlpoint_of_Element[ie * MAX_NO_CP_ON_ELEMENT + cp] * (info->DIMENSION + 1) + d];
+				const size_t id = ((size_t)ie * vertex_num + jv) * info->DIMENSION + d;
+				const double xg_raw = xg;
+				const double len_d = dom_hi[d] - dom_lo[d];
+
+				if (has_user_faces && g_user_face_axis[id])
+				{
+					// 入力ファイルで指定された面上の点: 指定された量(自然座標の値)に固定する。
+					double face_val = g_user_face_value[id];
+					if (face_val < dom_lo[d] - 1.0e-9 * len_d || face_val > dom_hi[d] + 1.0e-9 * len_d)
+					{
+						printf("ERROR: free-surface value %g is outside the global patch domain [%g, %g] (element %d, point %d, axis %d)\n", face_val, dom_lo[d], dom_hi[d], ie, jv, d);
+						exit(1);
+					}
+					face_val = std::min(std::max(face_val, dom_lo[d]), dom_hi[d]);
+					// 初期ジオメトリで指定の面上にない場合は警告(入力ミスの検出)
+					if (fabs(xg_raw - face_val) > USER_FACE_CHECK_TOL * len_d)
+					{
+						if (n_user_mismatch < 10)
+							printf("WARNING: listed free-surface point is not on the face in the initial geometry: element %d, point %d, axis %d (listed value = %g, initial natural coord = %e)\n", ie, jv, d, face_val, xg_raw);
+						n_user_mismatch++;
+					}
+					face_flag[id] = 1;
+					face_value[id] = face_val;
+					xg = face_val;
+					any_face = true;
+					n_user_applied++;
+				}
+
+				init_para[id] = std::min(std::max(xg, dom_lo[d]), dom_hi[d]);
+			}
+			if (any_face)
+				n_face_vertices++;
+		}
+	}
+	printf("Vertices on a global patch face (component fixed in Newton iteration): %lld of %lld\n", n_face_vertices, (long long)local_ele_num * vertex_num);
+	if (has_user_faces)
+	{
+		printf("Free-surface components from the input list: %lld (not on the face in the initial geometry: %lld)\n", n_user_applied, n_user_mismatch);
+		if (n_user_mismatch > 10)
+			printf("  (only the first 10 mismatches were printed)\n");
+	}
+
+	// 頂点ごとの逆写像は互いに独立なので要素ごとに並列化する(形状関数のバッファは thread_local)
+	#pragma omp parallel for schedule(dynamic, 16) private(j, k, residual_norm)
 	for (i = 0; i < local_ele_num; i++)
 	{
 		for (j = 0; j < vertex_num; j++)
 		{
-			vector<double> para_patch_coord(info->DIMENSION, 0.5); // 各頂点ごとに初期値をリセット
+			vector<double> para_patch_coord(info->DIMENSION, 0.0);
+			bool active[MAX_DIMENSION] = {false, false, false}; // 面上にあるため固定する成分
+			int n_active = 0;
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				const size_t id = ((size_t)i * vertex_num + j) * info->DIMENSION + d;
+				para_patch_coord[d] = init_para[id]; // 初期自然座標から開始(面上の成分はちょうど 0 または 1)
+				if (face_flag[id] != 0)
+				{
+					active[d] = true;
+					n_active++;
+				}
+			}
 			for (k = 0; k < MAX_ITER; k++)
 			{
 				// calculate residulal vector: R(ξ) = N(ξ) * X - x
@@ -3263,7 +3598,86 @@ void First_inverse_mapping(information *info)
 						sum += Jacobian_inverse[d * info->DIMENSION + e] * Residual_vector[e];
 					delta_para[d] = -sum;
 				}
+
+				// ヤコビアンは要素親座標(-1~1)に対するものなので、パッチ座標(ノットスパン)へ換算する
+				double span_dir[MAX_DIMENSION] = {1.0, 1.0, 1.0};
+				{
+					const int p_now = info->Element_patch[temp_ele];
+					for (int d = 0; d < info->DIMENSION; d++)
+					{
+						const int base = info->Total_Knot_to_patch_dim[p_now * info->DIMENSION + d] + info->Order[p_now * info->DIMENSION + d] + info->ENC[temp_ele * info->DIMENSION + d];
+						const double span = info->Position_Knots[base + 1] - info->Position_Knots[base];
+						span_dir[d] = span;
+						delta_para[d] *= 0.5 * span;
+					}
+				}
 				
+				// 面上の成分を固定した拘束付きの Gauss-Newton 法: 自由な成分だけを
+				//   (A_F^T A_F) δ_F = -A_F^T R,  A[e][d] = ∂x_e/∂ξ_d(パッチ座標)
+				// で更新する。目標点が面の外にわずかにずれていても、面内の最近接点へ収束する。
+				if (n_active > 0)
+				{
+					const int Dm2 = info->DIMENSION;
+					double Jm[MAX_DIMENSION * MAX_DIMENSION] = {0.0};
+					for (int q = 0; q < Dm2 * Dm2; q++)
+						Jm[q] = Jacobian_inverse[q];
+					if (Dm2 == 2)
+						InverseMatrix_2x2(Jm);
+					else
+						InverseMatrix_3x3(Jm); // Jm[e * Dm2 + d] = ∂x_e/∂ξ̃_d
+
+					int fidx[MAX_DIMENSION] = {0, 0, 0};
+					int nf = 0;
+					for (int d = 0; d < Dm2; d++)
+					{
+						delta_para[d] = 0.0;
+						if (!active[d])
+							fidx[nf++] = d;
+					}
+					if (nf > 0)
+					{
+						double Am[MAX_DIMENSION][MAX_DIMENSION] = {{0.0}};
+						for (int e2 = 0; e2 < Dm2; e2++)
+							for (int d = 0; d < Dm2; d++)
+								Am[e2][d] = Jm[e2 * Dm2 + d] * 2.0 / span_dir[d];
+						double Mf[3][3] = {{0.0}};
+						double rf[3] = {0.0}, sf[3] = {0.0};
+						for (int a = 0; a < nf; a++)
+						{
+							for (int b2 = 0; b2 < nf; b2++)
+								for (int e2 = 0; e2 < Dm2; e2++)
+									Mf[a][b2] += Am[e2][fidx[a]] * Am[e2][fidx[b2]];
+							for (int e2 = 0; e2 < Dm2; e2++)
+								rf[a] -= Am[e2][fidx[a]] * Residual_vector[e2];
+						}
+						if (solve_small_system(nf, Mf, rf, sf))
+							for (int a = 0; a < nf; a++)
+								delta_para[fidx[a]] = sf[a];
+					}
+
+					// 拘束付きの停留点(更新量が十分小さい)に達したら収束とみなす
+					double dmax = 0.0;
+					for (int d = 0; d < Dm2; d++)
+						dmax = std::max(dmax, fabs(delta_para[d]));
+					if (dmax <= 1.0e-12)
+					{
+						for (int d = 0; d < Dm2; d++)
+							info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + d] = para_patch_coord[d];
+						const bool accept_c = residual_norm <= BOUNDARY_ACCEPT_RESIDUAL;
+						g_target_para_valid[i * vertex_num + j] = accept_c ? 1 : 0;
+						if (!accept_c)
+						{
+							StallInfo si;
+							si.e = i; si.v = j; si.residual = residual_norm; si.on_boundary = true; si.valid = false;
+							for (int d = 0; d < MAX_DIMENSION; d++)
+								si.x[d] = (d < info->DIMENSION) ? info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d] : 0.0;
+							#pragma omp critical(first_inverse_stall)
+							stall_list.push_back(si);
+						}
+						break;
+					}
+				}
+
 				// damped update: accept only when the residual decreases
 				double alpha = 1.0;
 				bool accepted = false;
@@ -3277,10 +3691,11 @@ void First_inverse_mapping(information *info)
 					for (int d = 0; d < info->DIMENSION; d++)
 					{
 						trial_para[d] = para_patch_coord[d] + alpha * delta_para[d];
-						if (trial_para[d] >= 1.0)
-							trial_para[d] = 1.0;
-						if (trial_para[d] <= 0.0)
-							trial_para[d] = 0.0;
+						// 定義域の外へ出る場合は境界に射影する
+						if (trial_para[d] >= dom_hi[d])
+							trial_para[d] = dom_hi[d];
+						if (trial_para[d] <= dom_lo[d])
+							trial_para[d] = dom_lo[d];
 					}
 
 					temp_ele = ele_check(info->Global_local_patch, trial_para.data(), info);
@@ -3306,13 +3721,32 @@ void First_inverse_mapping(information *info)
 
 				if (!accepted)
 				{
-					printf("WARNING: line search failed for element %d, vertex %d at iteration %d\n", i, j, k);
+					#pragma omp critical(first_inverse_stall)
+					printf("WARNING: line search failed for element %d, vertex %d at iteration %d (residual = %e)\n", i, j, k, residual_norm);
+					// 未初期化のまま残さず、現時点で最良の点を保存する
+					bool on_boundary = false;
+					for (int d = 0; d < info->DIMENSION; d++)
+					{
+						const double btol = 1.0e-12 * (dom_hi[d] - dom_lo[d]);
+						if (fabs(para_patch_coord[d] - dom_lo[d]) <= btol || fabs(para_patch_coord[d] - dom_hi[d]) <= btol)
+							on_boundary = true;
+					}
+					const bool accept = on_boundary && residual_norm <= BOUNDARY_ACCEPT_RESIDUAL;
+					g_target_para_valid[i * vertex_num + j] = accept ? 1 : 0;
+					StallInfo si;
+					si.e = i; si.v = j; si.residual = residual_norm; si.on_boundary = on_boundary; si.valid = accept;
+					for (int d = 0; d < MAX_DIMENSION; d++)
+						si.x[d] = (d < info->DIMENSION) ? info->Target_Physical_Coord[(i * vertex_num + j) * info->DIMENSION + d] : 0.0;
+					#pragma omp critical(first_inverse_stall)
+					stall_list.push_back(si);
+					for (int d = 0; d < info->DIMENSION; d++)
+						info->Target_Para_Coord[(i * vertex_num + j) * info->DIMENSION + d] = para_patch_coord[d];
 					break;
 				}
 			}
 			if (k == MAX_ITER)
 			{
-				printf("ERROR: Maximum iterations reached without convergence for vertex %d of element %d\n", j, i);
+				printf("ERROR: Maximum iterations reached without convergence for vertex %d of element %d (residual = %e)\n", j, i, residual_norm);
 				exit(1);
 			}
 		}
@@ -3360,124 +3794,886 @@ void First_inverse_mapping(information *info)
 	printf("Maximum Residual Norm = %e\n", max_residual_norm);
 	printf("Average Residual Norm = %e\n", sum_residual_norm / (local_ele_num * vertex_num));
 	printf("\n");
+
+	// 面上に固定した成分(入力の自由表面リスト)を、指定された量に厳密に揃える。
+	// Newton 法の反復中も固定成分は動かないが、後段の最小二乗に渡す値が面と完全に一致することを保証する。
+	{
+		long long forced = 0;
+		double max_change = 0.0;
+		for (int pt_num = 0; pt_num < vertex_num * local_ele_num; pt_num++)
+		{
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				const size_t id = (size_t)pt_num * info->DIMENSION + d;
+				if (face_flag[id] == 0)
+					continue;
+				const double face_val = face_value[id];
+				double &coord = info->Target_Para_Coord[id];
+				max_change = std::max(max_change, fabs(coord - face_val));
+				coord = face_val;
+				forced++;
+			}
+		}
+		printf("Face components set exactly to the face value: %lld (max change = %e)\n", forced, max_change);
+	}
+
+	// 定義域境界の数値誤差のみをスナップする(定義域長に対する相対許容誤差)。
+	// 許容誤差を超えて外れている点は黙って丸めず、警告として報告する。
+	{
+		int snapped = 0, outside = 0;
+		for (int pt_num = 0; pt_num < vertex_num * local_ele_num; pt_num++)
+		{
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				const double tol = 1.0e-10 * (dom_hi[d] - dom_lo[d]);
+				double &coord = info->Target_Para_Coord[pt_num * info->DIMENSION + d];
+				if (fabs(coord - dom_lo[d]) <= tol)
+				{
+					if (coord != dom_lo[d]) snapped++;
+					coord = dom_lo[d];
+				}
+				else if (fabs(coord - dom_hi[d]) <= tol)
+				{
+					if (coord != dom_hi[d]) snapped++;
+					coord = dom_hi[d];
+				}
+				else if (coord < dom_lo[d] || coord > dom_hi[d])
+				{
+					outside++;
+					g_target_para_valid[pt_num] = 0; // 定義域外の点は逆写像が信頼できない
+					coord = (coord < dom_lo[d]) ? dom_lo[d] : dom_hi[d];
+				}
+			}
+		}
+		if (snapped > 0)
+			printf("Target para coord: %d values snapped to domain boundary\n", snapped);
+		if (outside > 0)
+			printf("WARNING: %d target para coord values were outside the global patch domain and were projected\n", outside);
+
+		int invalid_total = 0;
+		for (size_t q = 0; q < g_target_para_valid.size(); q++)
+			if (!g_target_para_valid[q])
+				invalid_total++;
+		if (invalid_total > 0)
+			printf("WARNING: %d of %zu target points are marked invalid and excluded from the least squares\n", invalid_total, g_target_para_valid.size());
+
+		// 直線探索が止まった点の一覧を出力(調査用)
+		if (!stall_list.empty())
+		{
+			// 並列実行で順序が不定になるので、要素・頂点番号で整列する
+			std::sort(stall_list.begin(), stall_list.end(), [](const StallInfo &a, const StallInfo &b) { return a.e < b.e || (a.e == b.e && a.v < b.v); });
+			int n_valid = 0, n_boundary = 0;
+			double max_res_invalid = 0.0;
+			FILE *fp_stall = fopen("first_inverse_stalled_points.txt", "w");
+			if (fp_stall)
+				fprintf(fp_stall, "element vertex residual on_boundary used_in_LSQ x y z\n");
+			for (const StallInfo &si : stall_list)
+			{
+				if (si.valid) n_valid++;
+				else max_res_invalid = std::max(max_res_invalid, si.residual);
+				if (si.on_boundary) n_boundary++;
+				if (fp_stall)
+					fprintf(fp_stall, "%d %d %.6e %d %d %.12e %.12e %.12e\n", si.e, si.v, si.residual, (int)si.on_boundary, (int)si.valid, si.x[0], si.x[1], si.x[2]);
+			}
+			if (fp_stall)
+				fclose(fp_stall);
+			printf("Stalled points: %zu (on boundary: %d, accepted: %d, rejected: %zu, max rejected residual = %e) -> first_inverse_stalled_points.txt\n",
+				stall_list.size(), n_boundary, n_valid, stall_list.size() - n_valid, max_res_invalid);
+		}
+	}
+}
+
+
+// 入力ファイルの自由表面リスト(要素番号・点番号・軸・量)から、ローカルジオメトリの制御点のうち
+// 成分が既知となるものを決定する。
+//  - 要素の面・稜・頂点のうち、その点がすべて同じ軸・同じ量でリストにあり、かつパッチ境界上にあるものを対象とする。
+//  - 開いたノットベクトルでは、パッチ境界の形状は境界上の制御点だけで決まるので、
+//    その制御点の当該成分を量に固定すれば、曲面は面(または稜)に厳密に一致する。
+//  - 制御点の判定は要素内の番号付け(0番が上端側)に依存せず、パッチ内インデックス(Geo_INC)で行う。
+//  - 面や稜が完全にはリストされていない場合は、その制御点は既知にしない(警告は出さない)。
+// cp_known[cp * DIM + axis] = 1 のとき、cp_known_value[...] がその成分の既知の値。
+static void build_known_cp_from_list(information *info, vector<signed char> &cp_known, vector<double> &cp_known_value, long long &n_pairs, long long &n_mismatch)
+{
+	const int Dm = info->DIMENSION;
+	const int vnum = (Dm == 2) ? 9 : 27;
+	const int element_total = info->Geo_Total_Element_on_mesh;
+	const int cp_total = info->Geo_Total_Control_Point_on_mesh;
+	const double CP_CHECK_TOL = 1.0e-6; // 入力の初期座標との食い違い許容(定義域長に対する比)
+	n_pairs = 0;
+	n_mismatch = 0;
+	cp_known.assign((size_t)cp_total * Dm, 0);
+	cp_known_value.assign((size_t)cp_total * Dm, 0.0);
+	if (g_user_face_axis.empty())
+		return;
+
+	double lo[MAX_DIMENSION] = {0.0}, hi[MAX_DIMENSION] = {0.0};
+	get_global_patch_domain(info, lo, hi);
+
+	int npat = 1;
+	for (int d = 0; d < Dm; d++)
+		npat *= 3;
+
+	for (int ele = 0; ele < element_total; ele++)
+	{
+		const int patch = info->Geo_Element_patch[ele];
+		const int conn = info->Geo_No_Control_point_ON_ELEMENT[patch];
+		for (int a = 0; a < Dm; a++)
+		{
+			bool any_listed = false;
+			for (int j = 0; j < vnum && !any_listed; j++)
+				any_listed = g_user_face_axis[((size_t)ele * vnum + j) * Dm + a] != 0;
+			if (!any_listed)
+				continue;
+
+			// code の各桁: 0=その方向は自由, 1=下端側に固定, 2=上端側に固定(code=0 は除く)
+			for (int code = 1; code < npat; code++)
+			{
+				int side[MAX_DIMENSION] = {0, 0, 0}; // 0: 自由, 1: 下端, 2: 上端
+				int t = code;
+				for (int d = 0; d < Dm; d++)
+				{
+					side[d] = t % 3;
+					t /= 3;
+				}
+
+				// この面・稜・頂点が、要素の中でパッチ境界上にあるか
+				bool on_patch_boundary = true;
+				for (int d = 0; d < Dm && on_patch_boundary; d++)
+				{
+					if (side[d] == 0)
+						continue;
+					const int n_el = info->Geo_No_Control_point[patch * Dm + d] - info->Geo_Order[patch * Dm + d];
+					const int ene = info->Geo_ENC[ele * Dm + d];
+					if (side[d] == 1 && ene != 0)
+						on_patch_boundary = false;
+					if (side[d] == 2 && ene != n_el - 1)
+						on_patch_boundary = false;
+				}
+				if (!on_patch_boundary)
+					continue;
+
+				// その要素の点(要素内の頂点番号: ξ が最速, -1,0,+1)がすべて、同じ軸・同じ量でリストにあるか
+				bool complete = true, value_set = false;
+				double value = 0.0;
+				for (int p = 0; p < vnum && complete; p++)
+				{
+					bool in_entity = true;
+					int q = p;
+					for (int d = 0; d < Dm; d++)
+					{
+						const int pos = q % 3; // 0: -1, 1: 0, 2: +1
+						q /= 3;
+						if (side[d] == 1 && pos != 0)
+							in_entity = false;
+						if (side[d] == 2 && pos != 2)
+							in_entity = false;
+					}
+					if (!in_entity)
+						continue;
+					const size_t id = ((size_t)ele * vnum + p) * Dm + a;
+					if (!g_user_face_axis[id])
+					{
+						complete = false;
+						break;
+					}
+					if (!value_set)
+					{
+						value = g_user_face_value[id];
+						value_set = true;
+					}
+					else if (fabs(g_user_face_value[id] - value) > 1.0e-12)
+					{
+						printf("ERROR: different free-surface values on one face/edge of element %d (axis %d): %g vs %g\n", ele, a, value, g_user_face_value[id]);
+						exit(1);
+					}
+				}
+				if (!complete || !value_set)
+					continue;
+
+				// 該当する制御点(パッチ内インデックスが境界)の成分 a を既知にする
+				for (int cp = 0; cp < conn; cp++)
+				{
+					const int gcp = info->Geo_Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + cp];
+					bool on_entity = true;
+					for (int d = 0; d < Dm && on_entity; d++)
+					{
+						if (side[d] == 0)
+							continue;
+						const int idx = info->Geo_INC[(size_t)patch * cp_total * Dm + (size_t)gcp * Dm + d];
+						const int ncp = info->Geo_No_Control_point[patch * Dm + d];
+						if (side[d] == 1 && idx != 0)
+							on_entity = false;
+						if (side[d] == 2 && idx != ncp - 1)
+							on_entity = false;
+					}
+					if (!on_entity)
+						continue;
+
+					const size_t kid = (size_t)gcp * Dm + a;
+					if (cp_known[kid])
+					{
+						if (fabs(cp_known_value[kid] - value) > 1.0e-12)
+						{
+							printf("ERROR: conflicting known values for control point %d, axis %d: %g vs %g (element %d)\n", gcp, a, cp_known_value[kid], value, ele);
+							exit(1);
+						}
+						continue;
+					}
+					cp_known[kid] = 1;
+					cp_known_value[kid] = value;
+					n_pairs++;
+					const double init_val = info->Geo_Node_Coordinate[gcp * (Dm + 1) + a];
+					if (fabs(init_val - value) > CP_CHECK_TOL * (hi[a] - lo[a]))
+						n_mismatch++;
+				}
+			}
+		}
+	}
+}
+
+
+// constant.ini の FIX_PLANE_* で指定した面上にある制御点を、全成分について既知(入力ファイルの初期座標のまま)にする。
+//  - 面: グローバルパッチの自然座標空間(ローカルの制御点が定義されている空間)で、方向 AXIS(0:ξ, 1:η, 2:ζ)の
+//        座標が POSITION の平面。POSITION はグローバルパッチの定義域 [lo, hi] に対する 0.0〜1.0 の割合
+//        (定義域が [0,1] ならそのまま座標値)。
+//  - 面上の制御点: 入力ファイルの初期座標の方向 AXIS 成分が、面の位置に一致する(許容 PLANE_TOL)制御点。
+//  - 既にリストから既知になっている成分は、リストの値を優先する(変更しない)。
+static void mark_plane_known_cp(information *info, vector<signed char> &cp_known, vector<double> &cp_known_value,
+								long long &n_cp_fixed, long long &n_comp_added, long long &n_near_miss, double &plane_pos, double &max_dev)
+{
+	const int Dm = info->DIMENSION;
+	const int axis = info->c.FIX_PLANE_AXIS;
+	const int cp_total = info->Geo_Total_Control_Point_on_mesh;
+	const double PLANE_TOL_REL = 1.0e-9;	// 面上とみなす許容(定義域長に対する比)
+	const double NEAR_TOL_REL = 1.0e-4;		// 惜しいもの(面の近くだが許容外)の報告用
+	n_cp_fixed = 0;
+	n_comp_added = 0;
+	n_near_miss = 0;
+	max_dev = 0.0;
+	if (axis >= Dm)
+	{
+		printf("ERROR: FIX_PLANE_AXIS = %d is not valid for a %d-dimensional model\n", axis, Dm);
+		exit(1);
+	}
+
+	double lo[MAX_DIMENSION] = {0.0}, hi[MAX_DIMENSION] = {0.0};
+	get_global_patch_domain(info, lo, hi);
+	const double len = hi[axis] - lo[axis];
+	plane_pos = lo[axis] + info->c.FIX_PLANE_POSITION * len;
+
+	for (int gcp = 0; gcp < cp_total; gcp++)
+	{
+		const double dev = fabs(info->Geo_Node_Coordinate[gcp * (Dm + 1) + axis] - plane_pos);
+		if (dev > PLANE_TOL_REL * len)
+		{
+			if (dev <= NEAR_TOL_REL * len)
+				n_near_miss++;
+			continue;
+		}
+		max_dev = std::max(max_dev, dev);
+		n_cp_fixed++;
+		for (int d = 0; d < Dm; d++)
+		{
+			const size_t kid = (size_t)gcp * Dm + d;
+			if (cp_known[kid])
+				continue;
+			cp_known[kid] = 1;
+			cp_known_value[kid] = info->Geo_Node_Coordinate[gcp * (Dm + 1) + d];
+			n_comp_added++;
+		}
+	}
+}
+
+
+// 疎行列 A(行ごとの非零 = 形状関数の値)に対する正規方程式 (A^T A + lambda I) x = rhs を、
+// 対角前処理付き共役勾配法で解く。A は CSR(行方向)と CSC(列方向)の両方で渡す。
+// 未知数の添字は ucol[cp](-1 は既知で未知数に含めない)。行列は作らず、A と A^T の積だけで計算する。
+struct SparseLsq
+{
+	int nrows = 0, ncols = 0;
+	vector<int> row_start, col;			// CSR: 行 r の非零は [row_start[r], row_start[r+1])
+	vector<double> val;
+	vector<int> col_start, col_row;		// CSC: 列 c の非零は [col_start[c], col_start[c+1])
+	vector<double> col_val;
+};
+
+static bool pcg_normal_equations(const SparseLsq &A, const vector<int> &uidx, int nu, double lambda,
+								 const vector<double> &rhs_u, vector<double> &x_u, int max_iter, double tol,
+								 int &iters, double &rel_res)
+{
+	const int nrows = A.nrows;
+	vector<int> ucp(nu, -1); // 未知数 -> 制御点
+	for (int cp = 0; cp < A.ncols; cp++)
+		if (uidx[cp] >= 0)
+			ucp[uidx[cp]] = cp;
+
+	// 対角前処理: diag(A^T A) + lambda
+	vector<double> Minv(nu, 1.0);
+	#pragma omp parallel for schedule(static)
+	for (int u = 0; u < nu; u++)
+	{
+		const int cp = ucp[u];
+		double d = lambda;
+		for (int k = A.col_start[cp]; k < A.col_start[cp + 1]; k++)
+			d += A.col_val[k] * A.col_val[k];
+		Minv[u] = (d > 0.0) ? 1.0 / d : 1.0;
+	}
+
+	vector<double> rrow(nrows, 0.0);
+	auto apply = [&](const vector<double> &xin, vector<double> &yout) {
+		#pragma omp parallel for schedule(static)
+		for (int r = 0; r < nrows; r++)
+		{
+			double sum = 0.0;
+			for (int k = A.row_start[r]; k < A.row_start[r + 1]; k++)
+			{
+				const int u = uidx[A.col[k]];
+				if (u >= 0)
+					sum += A.val[k] * xin[u];
+			}
+			rrow[r] = sum;
+		}
+		#pragma omp parallel for schedule(static)
+		for (int u = 0; u < nu; u++)
+		{
+			const int cp = ucp[u];
+			double sum = lambda * xin[u];
+			for (int k = A.col_start[cp]; k < A.col_start[cp + 1]; k++)
+				sum += A.col_val[k] * rrow[A.col_row[k]];
+			yout[u] = sum;
+		}
+	};
+	auto dot = [&](const vector<double> &p, const vector<double> &q) {
+		double sum = 0.0;
+		#pragma omp parallel for reduction(+ : sum) schedule(static)
+		for (int u = 0; u < nu; u++)
+			sum += p[u] * q[u];
+		return sum;
+	};
+
+	vector<double> r(nu), z(nu), p(nu), Ap(nu);
+	apply(x_u, Ap);
+	for (int u = 0; u < nu; u++)
+		r[u] = rhs_u[u] - Ap[u];
+	const double rhs_norm = sqrt(dot(rhs_u, rhs_u));
+	const double stop = tol * std::max(rhs_norm, 1.0e-300);
+	for (int u = 0; u < nu; u++)
+	{
+		z[u] = Minv[u] * r[u];
+		p[u] = z[u];
+	}
+	double rz = dot(r, z);
+	double rnorm = sqrt(dot(r, r));
+	iters = 0;
+	while (rnorm > stop && iters < max_iter)
+	{
+		apply(p, Ap);
+		const double pAp = dot(p, Ap);
+		if (!(pAp > 0.0) || !std::isfinite(pAp))
+			break;
+		const double alpha = rz / pAp;
+		#pragma omp parallel for schedule(static)
+		for (int u = 0; u < nu; u++)
+		{
+			x_u[u] += alpha * p[u];
+			r[u] -= alpha * Ap[u];
+			z[u] = Minv[u] * r[u];
+		}
+		const double rz_new = dot(r, z);
+		const double beta = rz_new / rz;
+		rz = rz_new;
+		#pragma omp parallel for schedule(static)
+		for (int u = 0; u < nu; u++)
+			p[u] = z[u] + beta * p[u];
+		rnorm = sqrt(dot(r, r));
+		iters++;
+	}
+	rel_res = rnorm / std::max(rhs_norm, 1.0e-300);
+	return rnorm <= stop;
+}
+
+
+// 全パッチを一括で解く最小二乗。
+//  - 未知数: 成分ごとに、既知でない制御点の成分のみ(既知成分は右辺へ移す)。パッチ間で共有する制御点は1つの未知数。
+//  - 方程式: 要素頂点・中間点の目標自然座標 = 形状関数 × 制御点座標。
+//  - 同じパッチの同じ頂点(隣接要素が共有する頂点)は1行にまとめ、目標は平均する。
+//    重複の判定は目標座標ではなく頂点の格子位置で行うので、座標が一致する特異要素の点は別の拘束として残る。
+//  - 正則化: 元の制御点位置への弱い引き寄せ(拘束の足りない制御点が暴れないようにする)。
+static void second_inverse_global_lsq(information *info, const vector<signed char> &cp_known, const vector<double> &cp_known_value, const vector<char> &sample_valid)
+{
+	const int Dm = info->DIMENSION;
+	const int vnum = (Dm == 2) ? 9 : 27;
+	const int element_total = info->Geo_Total_Element_on_mesh;
+	const int cp_total = info->Geo_Total_Control_Point_on_mesh;
+	const double REG_REL = 1.0e-6;
+	const int CG_MAX_ITER = 5000;
+	const double CG_TOL = 1.0e-10;
+
+	// 初期値: 入力の制御点(重みも含む)
+	for (int cp = 0; cp < cp_total; cp++)
+		for (int d = 0; d < Dm + 1; d++)
+			info->New_Node_Coordinate[cp * (Dm + 1) + d] = info->Geo_Node_Coordinate[cp * (Dm + 1) + d];
+
+	// 1. 全有効サンプルの形状関数の値(並列)
+	const size_t stride = MAX_NO_CP_ON_ELEMENT;
+	vector<double> Rall((size_t)element_total * vnum * stride, 0.0);
+	#pragma omp parallel for schedule(dynamic, 16)
+	for (int ele = 0; ele < element_total; ele++)
+	{
+		for (int j = 0; j < vnum; j++)
+		{
+			if (!sample_valid[(size_t)ele * vnum + j])
+				continue;
+			double vp[MAX_DIMENSION] = {0.0};
+			int q = j;
+			for (int d = 0; d < Dm; d++)
+			{
+				vp[d] = (double)(q % 3) - 1.0;
+				q /= 3;
+			}
+			geo_shape_and_dshape(&Rall[((size_t)ele * vnum + j) * stride], vp, ele, info);
+		}
+	}
+
+	// 2. 行の組み立て(頂点の格子位置で重複をまとめる)
+	SparseLsq A;
+	A.ncols = cp_total;
+	A.row_start.push_back(0);
+	vector<double> tsum; // 行ごとの目標の和(Dm 成分)
+	vector<int> tcount;
+	vector<double> tfirst;
+	std::unordered_map<unsigned long long, int> row_of_key;
+	row_of_key.reserve((size_t)element_total * 12);
+	long long n_samples = 0, n_merged = 0;
+	double max_target_disagreement = 0.0;
+	for (int ele = 0; ele < element_total; ele++)
+	{
+		const int patch = info->Geo_Element_patch[ele];
+		const int conn = info->Geo_No_Control_point_ON_ELEMENT[patch];
+		for (int j = 0; j < vnum; j++)
+		{
+			const size_t sid = (size_t)ele * vnum + j;
+			if (!sample_valid[sid])
+				continue;
+			n_samples++;
+
+			// 頂点の格子位置: 方向 d の 2*ENC + (0,1,2)
+			unsigned long long key = (unsigned long long)patch;
+			if (patch >= 4096)
+			{
+				printf("ERROR: too many patches for the vertex key (%d)\n", patch);
+				exit(1);
+			}
+			int q = j;
+			for (int d = 0; d < Dm; d++)
+			{
+				const long long lat = 2LL * info->Geo_ENC[ele * Dm + d] + (q % 3);
+				q /= 3;
+				if (lat >= (1LL << 17))
+				{
+					printf("ERROR: too many elements along a direction for the vertex key\n");
+					exit(1);
+				}
+				key = (key << 17) | (unsigned long long)lat;
+			}
+
+			const double *tgt = &info->Target_Para_Coord[sid * Dm];
+			auto it = row_of_key.find(key);
+			if (it == row_of_key.end())
+			{
+				const int row = (int)tcount.size();
+				row_of_key.emplace(key, row);
+				for (int cp = 0; cp < conn; cp++)
+				{
+					A.col.push_back(info->Geo_Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + cp]);
+					A.val.push_back(Rall[sid * stride + cp]);
+				}
+				A.row_start.push_back((int)A.col.size());
+				for (int d = 0; d < Dm; d++)
+				{
+					tsum.push_back(tgt[d]);
+					tfirst.push_back(tgt[d]);
+				}
+				tcount.push_back(1);
+			}
+			else
+			{
+				const int row = it->second;
+				for (int d = 0; d < Dm; d++)
+				{
+					tsum[(size_t)row * Dm + d] += tgt[d];
+					max_target_disagreement = std::max(max_target_disagreement, fabs(tgt[d] - tfirst[(size_t)row * Dm + d]));
+				}
+				tcount[row]++;
+				n_merged++;
+			}
+		}
+	}
+	A.nrows = (int)tcount.size();
+	vector<double> trow((size_t)A.nrows * Dm);
+	for (int r = 0; r < A.nrows; r++)
+		for (int d = 0; d < Dm; d++)
+			trow[(size_t)r * Dm + d] = tsum[(size_t)r * Dm + d] / tcount[r];
+	vector<double>().swap(Rall);
+	printf("Global least squares: %lld valid samples -> %d unique equations (%lld shared-vertex samples merged), control points = %d\n", n_samples, A.nrows, n_merged, cp_total);
+	printf("  max disagreement of target values on a shared vertex = %e\n", max_target_disagreement);
+
+	// 3. CSC(列方向)を作る
+	A.col_start.assign(cp_total + 1, 0);
+	for (size_t k = 0; k < A.col.size(); k++)
+		A.col_start[A.col[k] + 1]++;
+	for (int cp = 0; cp < cp_total; cp++)
+		A.col_start[cp + 1] += A.col_start[cp];
+	A.col_row.resize(A.col.size());
+	A.col_val.resize(A.col.size());
+	{
+		vector<int> fill(A.col_start.begin(), A.col_start.end() - 1);
+		for (int r = 0; r < A.nrows; r++)
+			for (int k = A.row_start[r]; k < A.row_start[r + 1]; k++)
+			{
+				const int pos = fill[A.col[k]]++;
+				A.col_row[pos] = r;
+				A.col_val[pos] = A.val[k];
+			}
+	}
+
+	// 4. 成分ごとに、未知の制御点のみで解く
+	for (int d = 0; d < Dm; d++)
+	{
+		vector<int> uidx(cp_total, -1);
+		int nu = 0;
+		long long n_known = 0;
+		for (int cp = 0; cp < cp_total; cp++)
+		{
+			if (cp_known[(size_t)cp * Dm + d])
+				n_known++;
+			else
+				uidx[cp] = nu++;
+		}
+
+		// 右辺: A^T (t - A_known x_known) + lambda x0
+		vector<double> bres(A.nrows);
+		#pragma omp parallel for schedule(static)
+		for (int r = 0; r < A.nrows; r++)
+		{
+			double sum = trow[(size_t)r * Dm + d];
+			for (int k = A.row_start[r]; k < A.row_start[r + 1]; k++)
+			{
+				const int cp = A.col[k];
+				if (cp_known[(size_t)cp * Dm + d])
+					sum -= A.val[k] * cp_known_value[(size_t)cp * Dm + d];
+			}
+			bres[r] = sum;
+		}
+
+		double diag_sum = 0.0;
+		for (int cp = 0; cp < cp_total; cp++)
+			if (uidx[cp] >= 0)
+				for (int k = A.col_start[cp]; k < A.col_start[cp + 1]; k++)
+					diag_sum += A.col_val[k] * A.col_val[k];
+		const double lambda = REG_REL * ((nu > 0 && diag_sum > 0.0) ? diag_sum / nu : 1.0);
+
+		vector<double> rhs_u(nu, 0.0), x_u(nu, 0.0), x0_u(nu, 0.0);
+		for (int cp = 0; cp < cp_total; cp++)
+		{
+			const int u = uidx[cp];
+			if (u < 0)
+				continue;
+			double sum = 0.0;
+			for (int k = A.col_start[cp]; k < A.col_start[cp + 1]; k++)
+				sum += A.col_val[k] * bres[A.col_row[k]];
+			x0_u[u] = info->Geo_Node_Coordinate[cp * (Dm + 1) + d];
+			rhs_u[u] = sum + lambda * x0_u[u];
+			x_u[u] = x0_u[u];
+		}
+
+		int iters = 0;
+		double rel_res = 0.0;
+		auto t0 = chrono::system_clock::now();
+		const bool converged = pcg_normal_equations(A, uidx, nu, lambda, rhs_u, x_u, CG_MAX_ITER, CG_TOL, iters, rel_res);
+		const double sec = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - t0).count() / 1000.0;
+		if (check_nonfinite(x_u.data(), nu))
+		{
+			printf("ERROR: global least squares gave a non-finite solution for component %d. Control points of this component are left unchanged.\n", d);
+			continue;
+		}
+
+		double max_shift = 0.0;
+		for (int cp = 0; cp < cp_total; cp++)
+		{
+			const int u = uidx[cp];
+			double value;
+			if (u >= 0)
+			{
+				value = x_u[u];
+				max_shift = std::max(max_shift, fabs(value - x0_u[u]));
+			}
+			else
+				value = cp_known_value[(size_t)cp * Dm + d]; // 既知成分は指定値そのもの
+			info->New_Node_Coordinate[cp * (Dm + 1) + d] = value;
+		}
+		printf("  component %d: unknowns = %d (known = %lld), lambda = %e, CG iterations = %d, relative residual = %e%s, max control point shift = %e [%.2f s]\n",
+			   d, nu, n_known, lambda, iters, rel_res, converged ? "" : " (NOT converged)", max_shift, sec);
+	}
 }
 
 
 // Second Inverse mapping: 最小二乗法によって、ローカルIGA解析モデルの制御点を移動させる
 void Second_inverse_mapping(information *info)
 {
-	// const int fasten_flag_x = 1; // 0: fasten, 1: calculate
-	// const int fasten_flag_y = 1; // 0: fasten, 1: calculate
-	// const int fasten_flag_z = 1; // 0: fasten, 1: calculate
+	double dom_lo[MAX_DIMENSION] = {0.0}, dom_hi[MAX_DIMENSION] = {0.0};
+	get_global_patch_domain(info, dom_lo, dom_hi);
+
 	const int element_num = info->Geo_Total_Element_on_mesh;
 	const int sample_num = (info->DIMENSION == 2) ? 9 : 27;
+	vector<char> target_para_valid(element_num * sample_num, 1);
+	// 成分が既知の制御点は、入力ファイルの自由表面リストから決める(制御点座標からの自動判定は行わない)。
+	vector<signed char> cp_known;
+	vector<double> cp_known_value;
+	long long n_known_pairs = 0, n_known_mismatch = 0;
+	build_known_cp_from_list(info, cp_known, cp_known_value, n_known_pairs, n_known_mismatch);
+	printf("Known control point components from the input list: %lld (differing from the initial coordinates: %lld)\n", n_known_pairs, n_known_mismatch);
+	if (g_user_face_axis.empty())
+		printf("WARNING: no free-surface list was given: no control point component is fixed\n");
 
+	// 面の側(各軸の下端 / 上端)にリストの面があるか。制御点が面を越える側のクランプに使う。
+	bool has_lo_face[MAX_DIMENSION] = {false, false, false};
+	bool has_hi_face[MAX_DIMENSION] = {false, false, false};
 	for (int cp = 0; cp < info->Geo_Total_Control_Point_on_mesh; cp++)
+		for (int d = 0; d < info->DIMENSION; d++)
+			if (cp_known[(size_t)cp * info->DIMENSION + d])
+			{
+				const double kv = cp_known_value[(size_t)cp * info->DIMENSION + d];
+				const double ktol = 1.0e-9 * (dom_hi[d] - dom_lo[d]);
+				if (fabs(kv - dom_lo[d]) <= ktol)
+					has_lo_face[d] = true;
+				if (fabs(kv - dom_hi[d]) <= ktol)
+					has_hi_face[d] = true;
+			}
+
+	// 面上の制御点の固定(constant.ini)。自由表面の判定(上)はリストのみで行い、ここで増える既知成分は含めない。
+	if (info->c.FIX_PLANE_ENABLE != 0)
 	{
-		for (int d = 0; d < info->DIMENSION + 1; d++)
-			info->New_Node_Coordinate[cp * (info->DIMENSION + 1) + d] = info->Geo_Node_Coordinate[cp * (info->DIMENSION + 1) + d];
+		long long n_cp_fixed = 0, n_comp_added = 0, n_near_miss = 0;
+		double plane_pos = 0.0, max_dev = 0.0;
+		mark_plane_known_cp(info, cp_known, cp_known_value, n_cp_fixed, n_comp_added, n_near_miss, plane_pos, max_dev);
+		printf("Fixed plane (global natural coordinate axis %d = %.12g, knot position %g): %lld control points on the plane are kept at the input coordinates (%lld components newly made known, max deviation from the plane = %e)\n",
+			   info->c.FIX_PLANE_AXIS, plane_pos, info->c.FIX_PLANE_POSITION, n_cp_fixed, n_comp_added, max_dev);
+		if (n_cp_fixed == 0)
+			printf("WARNING: no control point lies on the specified plane (check FIX_PLANE_AXIS / FIX_PLANE_POSITION)\n");
+		if (n_near_miss > 0)
+			printf("NOTE: %lld control points lie within 1e-4 of the plane but not exactly on it, so they are not fixed\n", n_near_miss);
 	}
 
-	for (int ele = 0; ele < element_num; ele++)
-	{
-		const int patch = info->Geo_Element_patch[ele];
-		const int conn_cp_num = info->Geo_No_Control_point_ON_ELEMENT[patch];
-		if (conn_cp_num <= 0 || conn_cp_num > MAX_NO_CP_ON_ELEMENT)
-		{
-			printf("ERROR: invalid connectivity control-point count %d for patch %d\n", conn_cp_num, patch);
-			exit(1);
-		}
-
-		vector<double> shape_matrix(sample_num * conn_cp_num, 0.0);
-		vector<double> target(sample_num * info->DIMENSION, 0.0);
-
-		for (int j = 0; j < sample_num; j++)
-		{
-			vector<double> vertex_para(info->DIMENSION, 0.0);
-			if (info->DIMENSION == 2)
-			{
-				const double sample_coord[9][2] = {
-					{-1.0, -1.0}, {0.0, -1.0}, {1.0, -1.0},
-					{-1.0,  0.0}, {0.0,  0.0}, {1.0,  0.0},
-					{-1.0,  1.0}, {0.0,  1.0}, {1.0,  1.0}
-				};
-				vertex_para[0] = sample_coord[j][0];
-				vertex_para[1] = sample_coord[j][1];
-			}
-			else if (info->DIMENSION == 3)
-			{
-				const double sample_coord[27][3] = {
-					{-1.0, -1.0, -1.0}, { 0.0, -1.0, -1.0}, { 1.0, -1.0, -1.0},
-					{-1.0,  0.0, -1.0}, { 0.0,  0.0, -1.0}, { 1.0,  0.0, -1.0},
-					{-1.0,  1.0, -1.0}, { 0.0,  1.0, -1.0}, { 1.0,  1.0, -1.0},
-
-					{-1.0, -1.0,  0.0}, { 0.0, -1.0,  0.0}, { 1.0, -1.0,  0.0},
-					{-1.0,  0.0,  0.0}, { 0.0,  0.0,  0.0}, { 1.0,  0.0,  0.0},
-					{-1.0,  1.0,  0.0}, { 0.0,  1.0,  0.0}, { 1.0,  1.0,  0.0},
-
-					{-1.0, -1.0,  1.0}, { 0.0, -1.0,  1.0}, { 1.0, -1.0,  1.0},
-					{-1.0,  0.0,  1.0}, { 0.0,  0.0,  1.0}, { 1.0,  0.0,  1.0},
-					{-1.0,  1.0,  1.0}, { 0.0,  1.0,  1.0}, { 1.0,  1.0,  1.0}
-				};
-				vertex_para[0] = sample_coord[j][0];
-				vertex_para[1] = sample_coord[j][1];
-				vertex_para[2] = sample_coord[j][2];
-			}
-
-			vector<double> R(MAX_NO_CP_ON_ELEMENT, 0.0);
-			vector<double> dR(MAX_NO_CP_ON_ELEMENT * info->DIMENSION, 0.0);
-			geo_shape_and_dshape(R.data(), dR.data(), vertex_para.data(), ele, true, info);
-
-			for (int cp = 0; cp < conn_cp_num; cp++)
-				shape_matrix[j * conn_cp_num + cp] = R[cp];
-
-			for (int d = 0; d < info->DIMENSION; d++)
-				target[j * info->DIMENSION + d] = info->Target_Para_Coord[(ele * sample_num + j) * info->DIMENSION + d];
-		}
-
-		// Solve normal equations: (A^T * A) * x = A^T * b
+	// 要素ベース最小二乗(無効化中の旧実装)用: いずれかの成分が既知の制御点は全成分を固定する
+	auto is_fixed_control_point = [&](int cp) {
 		for (int d = 0; d < info->DIMENSION; d++)
-		{
-			vector<double> normal_matrix(conn_cp_num * conn_cp_num, 0.0);
-			vector<double> rhs(conn_cp_num, 0.0);
-			vector<double> solution(conn_cp_num, 0.0);
+			if (cp_known[(size_t)cp * info->DIMENSION + d])
+				return true;
+		return false;
+	};
 
-			for (int cp1 = 0; cp1 < conn_cp_num; cp1++)
+	bool GLOBAL_MINIMIZATION = true; // 全パッチ一括の最小二乗(既定)
+	bool ELEMENT_BASED_MINIMIZATION = false; // 旧実装(要素ごとに解いて共有制御点を平均)。無効
+
+	// 要素ベースでの最小化
+	if (ELEMENT_BASED_MINIMIZATION)
+	{
+		vector<double> element_based_sum(info->Geo_Total_Control_Point_on_mesh * info->DIMENSION, 0.0);
+		vector<int> element_based_count(info->Geo_Total_Control_Point_on_mesh, 0);
+
+		for (int cp = 0; cp < info->Geo_Total_Control_Point_on_mesh; cp++)
+		{
+			for (int d = 0; d < info->DIMENSION + 1; d++)
+				info->New_Node_Coordinate[cp * (info->DIMENSION + 1) + d] = info->Geo_Node_Coordinate[cp * (info->DIMENSION + 1) + d];
+		}
+		for (int ele = 0; ele < element_num; ele++)
+		{
+			const int patch = info->Geo_Element_patch[ele];
+			const int conn_cp_num = info->Geo_No_Control_point_ON_ELEMENT[patch];
+			if (conn_cp_num <= 0 || conn_cp_num > MAX_NO_CP_ON_ELEMENT)
 			{
-				for (int cp2 = 0; cp2 < conn_cp_num; cp2++)
+				printf("ERROR: invalid connectivity control-point count %d for patch %d\n", conn_cp_num, patch);
+				exit(1);
+			}
+
+			vector<double> shape_matrix(sample_num * conn_cp_num, 0.0);
+			vector<double> target(sample_num * info->DIMENSION, 0.0);
+
+			for (int j = 0; j < sample_num; j++)
+			{
+				vector<double> vertex_para(info->DIMENSION, 0.0);
+				if (info->DIMENSION == 2)
 				{
-					double sum = 0.0;
-					for (int v = 0; v < sample_num; v++)
-						sum += shape_matrix[v * conn_cp_num + cp1] * shape_matrix[v * conn_cp_num + cp2];
-					normal_matrix[cp1 * conn_cp_num + cp2] = sum;
+					const double sample_coord[9][2] = {
+						{-1.0, -1.0}, {0.0, -1.0}, {1.0, -1.0},
+						{-1.0,  0.0}, {0.0,  0.0}, {1.0,  0.0},
+						{-1.0,  1.0}, {0.0,  1.0}, {1.0,  1.0}
+					};
+					vertex_para[0] = sample_coord[j][0];
+					vertex_para[1] = sample_coord[j][1];
+				}
+				else if (info->DIMENSION == 3)
+				{
+					const double sample_coord[27][3] = {
+						{-1.0, -1.0, -1.0}, { 0.0, -1.0, -1.0}, { 1.0, -1.0, -1.0},
+						{-1.0,  0.0, -1.0}, { 0.0,  0.0, -1.0}, { 1.0,  0.0, -1.0},
+						{-1.0,  1.0, -1.0}, { 0.0,  1.0, -1.0}, { 1.0,  1.0, -1.0},
+
+						{-1.0, -1.0,  0.0}, { 0.0, -1.0,  0.0}, { 1.0, -1.0,  0.0},
+						{-1.0,  0.0,  0.0}, { 0.0,  0.0,  0.0}, { 1.0,  0.0,  0.0},
+						{-1.0,  1.0,  0.0}, { 0.0,  1.0,  0.0}, { 1.0,  1.0,  0.0},
+
+						{-1.0, -1.0,  1.0}, { 0.0, -1.0,  1.0}, { 1.0, -1.0,  1.0},
+						{-1.0,  0.0,  1.0}, { 0.0,  0.0,  1.0}, { 1.0,  0.0,  1.0},
+						{-1.0,  1.0,  1.0}, { 0.0,  1.0,  1.0}, { 1.0,  1.0,  1.0}
+					};
+					vertex_para[0] = sample_coord[j][0];
+					vertex_para[1] = sample_coord[j][1];
+					vertex_para[2] = sample_coord[j][2];
 				}
 
-				double sum = 0.0;
-					for (int v = 0; v < sample_num; v++)
-					sum += shape_matrix[v * conn_cp_num + cp1] * target[v * info->DIMENSION + d];
-				rhs[cp1] = sum;
+				vector<double> R(MAX_NO_CP_ON_ELEMENT, 0.0);
+				vector<double> dR(MAX_NO_CP_ON_ELEMENT * info->DIMENSION, 0.0);
+				geo_shape_and_dshape(R.data(), dR.data(), vertex_para.data(), ele, true, info);
+
+				for (int cp = 0; cp < conn_cp_num; cp++)
+					shape_matrix[j * conn_cp_num + cp] = R[cp];
+
+				for (int d = 0; d < info->DIMENSION; d++)
+					target[j * info->DIMENSION + d] = info->Target_Para_Coord[(ele * sample_num + j) * info->DIMENSION + d];
 			}
 
-			GaussianElimination(solution.data(), rhs.data(), normal_matrix.data(), conn_cp_num);
-
-			for (int cp = 0; cp < conn_cp_num; cp++)
+			for (int d = 0; d < info->DIMENSION; d++)
 			{
-				const int global_cp = info->Geo_Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + cp];
-				info->New_Node_Coordinate[global_cp * (info->DIMENSION + 1) + d] = solution[cp];
-				//debug
-				// printf("Element %d, Control Point %d, Dimension %d: New Coordinate = %f\n", ele, global_cp, d, solution[cp]);
+				vector<double> normal_matrix(conn_cp_num * conn_cp_num, 0.0);
+				vector<double> rhs(conn_cp_num, 0.0);
+				vector<double> solution(conn_cp_num, 0.0);
+
+				for (int cp1 = 0; cp1 < conn_cp_num; cp1++)
+				{
+					for (int cp2 = 0; cp2 < conn_cp_num; cp2++)
+					{
+						double sum = 0.0;
+						for (int v = 0; v < sample_num; v++)
+							sum += shape_matrix[v * conn_cp_num + cp1] * shape_matrix[v * conn_cp_num + cp2];
+						normal_matrix[cp1 * conn_cp_num + cp2] = sum;
+					}
+
+					double sum = 0.0;
+					for (int v = 0; v < sample_num; v++)
+						sum += shape_matrix[v * conn_cp_num + cp1] * target[v * info->DIMENSION + d];
+					rhs[cp1] = sum;
+				}
+
+				GaussianElimination(solution.data(), rhs.data(), normal_matrix.data(), conn_cp_num);
+
+				for (int cp = 0; cp < conn_cp_num; cp++)
+				{
+					const int global_cp = info->Geo_Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + cp];
+					if (is_fixed_control_point(global_cp))
+						continue;
+					element_based_sum[global_cp * info->DIMENSION + d] += solution[cp];
+					if (d == 0)
+						element_based_count[global_cp]++;
+				}
 			}
 		}
+
+		for (int cp = 0; cp < info->Geo_Total_Control_Point_on_mesh; cp++)
+		{
+			if (element_based_count[cp] <= 0)
+				continue;
+
+			for (int d = 0; d < info->DIMENSION; d++)
+				info->New_Node_Coordinate[cp * (info->DIMENSION + 1) + d] =
+					element_based_sum[cp * info->DIMENSION + d] / element_based_count[cp];
+		}
 	}
+
+	// 全パッチ一括での最小二乗。第一逆写像で無効とされたサンプルは使わない。
+	if (GLOBAL_MINIMIZATION)
+	{
+		if (g_target_para_valid.size() == (size_t)element_num * sample_num)
+			target_para_valid = g_target_para_valid;
+		second_inverse_global_lsq(info, cp_known, cp_known_value, target_para_valid);
+	}
+
+	// 入力リストの自由表面(面の値が定義域の下端または上端のもの)は厳密に保つ必要がある。
+	//  - 既知の制御点成分は動かさないので、平面上の制御点は指定の値のまま(厳密に一致)。
+	//  - 動かした制御点が自由表面より外側に出ると、凸包性により曲面が自由表面を貫通するため、
+	//    リストに面がある側(下端側 / 上端側)のみ片側クランプする。
+	//  - それ以外の面(上端やη方向)は制御点が外に出ても曲面が内に収まれば正当なので、
+	//    既定では丸めず報告のみ。丸めたい場合は CLAMP_OTHER_FACES を true にする。
+	{
+		const bool CLAMP_FREE_SURFACE_SIDE = true;
+		const bool CLAMP_OTHER_FACES = false;
+
+		int snapped = 0, clamped_fs = 0, outside_other = 0;
+		double max_excursion_fs = 0.0, max_excursion_other = 0.0;
+		for (int cp_num = 0; cp_num < info->Geo_Total_Control_Point_on_mesh; cp_num++)
+		{
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				if (cp_known[(size_t)cp_num * info->DIMENSION + d])
+					continue; // 既知の成分は指定値(入力座標)のまま動かさない
+				const double tol = 1.0e-10 * (dom_hi[d] - dom_lo[d]);
+				double &coord = info->New_Node_Coordinate[cp_num * (info->DIMENSION + 1) + d];
+				if (fabs(coord - dom_lo[d]) <= tol)
+				{
+					if (coord != dom_lo[d]) snapped++;
+					coord = dom_lo[d];
+				}
+				else if (fabs(coord - dom_hi[d]) <= tol)
+				{
+					if (coord != dom_hi[d]) snapped++;
+					coord = dom_hi[d];
+				}
+				else if (coord < dom_lo[d] && has_lo_face[d] && CLAMP_FREE_SURFACE_SIDE)
+				{
+					clamped_fs++;
+					max_excursion_fs = std::max(max_excursion_fs, dom_lo[d] - coord);
+					coord = dom_lo[d];
+				}
+				else if (coord > dom_hi[d] && has_hi_face[d] && CLAMP_FREE_SURFACE_SIDE)
+				{
+					clamped_fs++;
+					max_excursion_fs = std::max(max_excursion_fs, coord - dom_hi[d]);
+					coord = dom_hi[d];
+				}
+				else if (coord < dom_lo[d] || coord > dom_hi[d])
+				{
+					outside_other++;
+					const double ex = (coord < dom_lo[d]) ? dom_lo[d] - coord : coord - dom_hi[d];
+					max_excursion_other = std::max(max_excursion_other, ex);
+					if (CLAMP_OTHER_FACES)
+						coord = (coord < dom_lo[d]) ? dom_lo[d] : dom_hi[d];
+				}
+			}
+		}
+		if (snapped > 0)
+			printf("New control points: %d values snapped to domain boundary\n", snapped);
+		if (clamped_fs > 0)
+			printf("NOTE: %d control point values were clamped onto the free-surface plane (max excursion = %e)\n", clamped_fs, max_excursion_fs);
+		if (outside_other > 0)
+			printf("NOTE: %d control point values lie outside the global patch domain on other faces (max excursion = %e)%s\n", outside_other, max_excursion_other, CLAMP_OTHER_FACES ? " and were clamped" : " (not clamped; see surface check below)");
+	}
+
 	// デバッグ：新しい制御点座標からパラメータ空間座標に写像し、インプットで与えた要素頂点との誤差を確認
 	double max_residual_norm = 0.0;
 	double sum_residual_norm = 0.0;
+	int valid_sample_total = 0;
+	int outside_surface_count = 0;
+	double max_surface_excursion = 0.0;
 	for (int ele = 0; ele < element_num; ele++)
 	{
 		for (int j = 0; j < sample_num; j++)
 		{
+			const int sample_index = ele * sample_num + j;
+			if (!target_para_valid[sample_index])
+				continue;
+
 			vector<double> vertex_para(info->DIMENSION, 0.0);
-			vector<double> local_para_coord(info->DIMENSION, 0.0);
 			vector<double> global_para_coord(info->DIMENSION, 0.0);
 			vector<double> global_para_coord_tilde(info->DIMENSION, 0.0);
 			vector<double> pc_test(info->DIMENSION, 0.0);
@@ -3511,38 +4707,48 @@ void Second_inverse_mapping(information *info)
 				vertex_para[2] = sample_coord[j][2];
 			}
 		
-			geo_trans_ele_patch_coord(local_para_coord.data(), vertex_para.data(), info->Geo_Element_patch[ele], ele, info);
-			geo_parameter_coord(ele, local_para_coord.data(), global_para_coord.data(), info);
+			vector<double> R(MAX_NO_CP_ON_ELEMENT, 0.0);
+			geo_shape_and_dshape(R.data(), vertex_para.data(), ele, info);
+			for (int cp = 0; cp < info->Geo_No_Control_point_ON_ELEMENT[info->Geo_Element_patch[ele]]; cp++)
+				for (int d = 0; d < info->DIMENSION; d++)
+					global_para_coord[d] += R[cp] * info->New_Node_Coordinate[info->Geo_Controlpoint_of_Element[ele * MAX_NO_CP_ON_ELEMENT + cp] * (info->DIMENSION + 1) + d];			
+
+			// 曲面上のサンプル点が定義域内にあるか(制御点ではなく曲面で判定する)
+			for (int d = 0; d < info->DIMENSION; d++)
+			{
+				const double tol = 1.0e-9 * (dom_hi[d] - dom_lo[d]);
+				const double ex = std::max(dom_lo[d] - global_para_coord[d], global_para_coord[d] - dom_hi[d]);
+				if (ex > tol)
+				{
+					outside_surface_count++;
+					max_surface_excursion = std::max(max_surface_excursion, ex);
+					break;
+				}
+			}
 
 			int glo_ele = ele_check(info->Global_local_patch, global_para_coord.data(), info);
 			tilde_coord(global_para_coord_tilde.data(), global_para_coord.data(), info->Element_patch[glo_ele], glo_ele, info);
-
-			vector<double> R(MAX_NO_CP_ON_ELEMENT, 0.0);
-			shape_and_dshape(R.data(), global_para_coord_tilde.data(), glo_ele, info);
-			for (int d = 0; d < info->DIMENSION; d++)
-			{
-				pc_test[d] = 0.0;
-				for (int cp = 0; cp < info->No_Control_point_ON_ELEMENT[info->Element_patch[glo_ele]]; cp++)
-				{
-					int global_cp = info->Controlpoint_of_Element[glo_ele * MAX_NO_CP_ON_ELEMENT + cp];
-					pc_test[d] += R[cp] * info->New_Node_Coordinate[global_cp * (info->DIMENSION + 1) + d];
-				}
-			}
+			physical_coord(glo_ele, global_para_coord_tilde.data(), pc_test.data(), info);
 
 			double residual_norm = 0.0;
 			for (int d = 0; d < info->DIMENSION; d++)
 			{
-				double residual = pc_test[d] - info->Target_Para_Coord[(ele * sample_num + j) * info->DIMENSION + d];
+				double residual = pc_test[d] - info->Target_Physical_Coord[(ele * sample_num + j) * info->DIMENSION + d];
 				residual_norm += residual * residual;
 			}
 			double rnorm = sqrt(residual_norm);
 
 			max_residual_norm = std::max(max_residual_norm, rnorm);
 			sum_residual_norm += rnorm;
+			valid_sample_total++;
 		}
 	}
 	printf("Maximum Residual Norm = %e\n", max_residual_norm);
-	printf("Average Residual Norm = %e\n", sum_residual_norm / (element_num * sample_num));
+	printf("Average Residual Norm = %e\n", sum_residual_norm / std::max(1, valid_sample_total));
+	if (outside_surface_count > 0)
+		printf("WARNING: %d sample points of the new local surface lie outside the global patch domain (max excursion = %e)\n", outside_surface_count, max_surface_excursion);
+	else
+		printf("Surface check: all sample points are inside the global patch domain\n");
 }
 
 // calcurate B

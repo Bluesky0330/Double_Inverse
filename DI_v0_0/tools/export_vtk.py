@@ -2,9 +2,9 @@
 import os
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
-INPUT_VERT = os.path.join(ROOT, 'analysis', 'input', 'SCCHP_v10_coarse', 'input_vertex.txt')
-INPUT_CTRL = os.path.join(ROOT, 'analysis', 'output_SCCHP_v10_coarse', 'second_inverse_new_control_points.txt')
-INPUT_NATURAL = os.path.join(ROOT, 'analysis', 'output_SCCHP_v10_coarse', 'first_inverse_natural_points.txt')
+INPUT_VERT = os.path.join(ROOT, 'analysis', 'input', 'SCCHP_one_eighth_0.4_fine', 'input_vertex.txt')
+INPUT_CTRL = os.path.join(ROOT, 'analysis', 'output_SCCHP_one_eighth_0.4_fine', 'second_inverse_new_control_points.txt')
+INPUT_NATURAL = os.path.join(ROOT, 'analysis', 'output_SCCHP_one_eighth_0.4_fine', 'first_inverse_natural_points.txt')
 OUT_DIR = os.path.join(ROOT, 'analysis')
 
 

@@ -34,6 +34,11 @@ public:
 	int CALC_ON_GP;
 	int CALC_ON_ELE_VERTEX;
 
+	// second inverse mapping: fix control points on a plane (e.g. crack surface)
+	int FIX_PLANE_ENABLE = 0;		// 0: off, 1: on
+	int FIX_PLANE_AXIS = 0;			// plane in the global natural coordinate space: 0: xi plane, 1: eta plane, 2: zeta plane
+	double FIX_PLANE_POSITION = 0.0;	// knot position of the global patch normal to the plane (0.0 - 1.0)
+
 	// gaussian quadrature
 	int USE_EXTENDED_QUADRATURE;
 	int NUM_GAUSS_POINTS;

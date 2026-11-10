@@ -29,6 +29,14 @@ int main(int argc, char **argv)
 
 	cout << Total_mesh << " input files detected." << endl << endl;
 
+	// このプログラムはグローバル+ローカルの2メッシュ入力が必須
+	if (argc < 4 || Total_mesh != 2)
+	{
+		printf("Usage: %s <global_input> <local_input> <vertex_file> <option_file>\n", argv[0]);
+		printf("Exactly 2 mesh input files are required (got %d).\n", Total_mesh);
+		return 1;
+	}
+
 	printf("start Get Option Data\n\n");
 
 	// get option file
@@ -55,8 +63,8 @@ int main(int argc, char **argv)
 		printf("SS-IGA model data carried out.(%d input files)\n\n", Total_mesh);
 	else
 	{
-		printf("Too many input files. Maximum is 4.\n\n");
-		exit(0);
+		printf("Too many input files. Maximum is 2.\n\n");
+		exit(1);
 	}
 
 	printf("start Get Input Data\n\n");
@@ -170,11 +178,19 @@ int main(int argc, char **argv)
 
 	// first Inverse mapping
 	printf("start first inverse mapping\n\n");
-	First_inverse_mapping(&info);
+	{
+		auto t0 = chrono::system_clock::now();
+		First_inverse_mapping(&info);
+		printf("\tFirst inverse mapping time:\t%.3f[s]\n\n", chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - t0).count() / 1000.0);
+	}
 
 	// second Inverse mapping
 	printf("start second inverse mapping\n\n");
-	Second_inverse_mapping(&info);
+	{
+		auto t0 = chrono::system_clock::now();
+		Second_inverse_mapping(&info);
+		printf("\tSecond inverse mapping time:\t%.3f[s]\n\n", chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - t0).count() / 1000.0);
+	}
 
 	// output as new imput file
 	printf("start output new input file\n\n");

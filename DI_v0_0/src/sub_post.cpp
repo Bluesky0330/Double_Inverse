@@ -124,17 +124,29 @@ void Calc_on_Element_Vertex(information *info)
 			for (int k = 0; k < info->Geo_No_Control_point_ON_ELEMENT[info->Geo_Element_patch[element]]; k++)
 				for (int l = 0; l < info->DIMENSION; l++)
 					Parameter_coord_at_ele_vertex[l] += R_geo[k] * info->Geo_Node_Coordinate[info->Geo_Controlpoint_of_Element[element * MAX_NO_CP_ON_ELEMENT + k] * (info->DIMENSION + 1) + l];
-			int ele_glo = ele_check(info->Global_local_patch, Parameter_coord_at_ele_vertex, info);
-			tilde_coord(glo_coord_tilde, Parameter_coord_at_ele_vertex, info->Global_local_patch, ele_glo, info);
-			physical_coord(ele_glo, glo_coord_tilde, out_coord, info);
-			for (int l = 0; l < info->DIMENSION; l++)
-				info->PhysicalCoordinate_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] = out_coord[l];
-
-			// output file
-			fprintf(fp_pc, "%d\t%d", element, point);
-			for (int k = 0; k < info->DIMENSION; k++)
-			fprintf(fp_pc, "\t%.15e", info->PhysicalCoordinate_at_ele_vertex[(element * vertex_n + point) * info->DIMENSION + k]);
-			fprintf(fp_pc, "\n");
+			
+			if (info->c.GEOMETRY_ONLY_OUTPUT == 1 || info->c.OUTPUT_GLOBAL_PARAMETERS == 1)	
+			{
+				// output file
+				fprintf(fp_pc, "%d\t%d", element, point);
+				for (int k = 0; k < info->DIMENSION; k++)
+				fprintf(fp_pc, "\t%.15e", Parameter_coord_at_ele_vertex[k]);
+				fprintf(fp_pc, "\n");
+			}
+			else
+			{
+				int ele_glo = ele_check(info->Global_local_patch, Parameter_coord_at_ele_vertex, info);
+				tilde_coord(glo_coord_tilde, Parameter_coord_at_ele_vertex, info->Global_local_patch, ele_glo, info);
+				physical_coord(ele_glo, glo_coord_tilde, out_coord, info);
+				for (int l = 0; l < info->DIMENSION; l++)
+					info->PhysicalCoordinate_at_ele_vertex[element * vertex_n * info->DIMENSION + point * info->DIMENSION + l] = out_coord[l];
+	
+				// output file
+				fprintf(fp_pc, "%d\t%d", element, point);
+				for (int k = 0; k < info->DIMENSION; k++)
+				fprintf(fp_pc, "\t%.15e", info->PhysicalCoordinate_at_ele_vertex[(element * vertex_n + point) * info->DIMENSION + k]);
+				fprintf(fp_pc, "\n");
+			}
 
 			// debug
 			// printf("element: %d, point: %d, physical coordinate: ", element, point);
